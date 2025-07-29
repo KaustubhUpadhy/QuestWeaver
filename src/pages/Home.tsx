@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Play, Users, Star, BookOpen, Sword, Zap, ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { useAuth } from '@/components/AuthContext'
+import AuthModal from '@/components/AuthModal'
 import Header from '@/components/Header'
 
 const Home = () => {
   const [activeFeature, setActiveFeature] = useState(0)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const { isAuthenticated, login } = useAuth()
   
   const features = [
     {
@@ -34,6 +37,26 @@ const Home = () => {
     return () => clearInterval(interval)
   }, [])
 
+  const handleGetStarted = () => {
+    if (isAuthenticated) {
+      // Navigate to adventures if already authenticated
+      window.location.href = '/adventures'
+    } else {
+      // Open signup modal if not authenticated
+      setAuthModalOpen(true)
+    }
+  }
+
+  const handleAuthSuccess = () => {
+    // Simulate successful authentication
+    const mockUser = {
+      id: '1',
+      name: 'Adventure Seeker',
+      email: 'user@example.com'
+    }
+    login(mockUser)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -48,8 +71,6 @@ const Home = () => {
           <div className="flex justify-center">
             {/* Centered Content */}
             <div className="max-w-4xl text-center space-y-8 animate-fade-in">
-
-
               {/* Main Headline */}
               <div className="space-y-6">
                 <h1 className="text-5xl md:text-7xl font-bold leading-tight animate-fade-in">
@@ -66,13 +87,25 @@ const Home = () => {
 
               {/* CTA Button */}
               <div className="flex justify-center animate-fade-in animate-delay-700">
-                <Link to="/adventures">
-                  <Button size="lg" className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300 group animate-bounce-gentle">
+                {isAuthenticated ? (
+                  <Link to="/adventures">
+                    <Button size="lg" className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300 group animate-bounce-gentle">
+                      <Sparkles className="h-5 w-5 mr-2 group-hover:animate-spin" />
+                      Start My Adventure Now
+                      <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button 
+                    size="lg" 
+                    className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300 group animate-bounce-gentle"
+                    onClick={handleGetStarted}
+                  >
                     <Sparkles className="h-5 w-5 mr-2 group-hover:animate-spin" />
-                    Start My Adventure Now
+                    Get Started
                     <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
-                </Link>
+                )}
               </div>
 
               {/* Additional Info */}
@@ -124,15 +157,25 @@ const Home = () => {
             <p className="text-xl text-muted-foreground">
               Join thousands of adventurers crafting their stories with AI-powered narratives
             </p>
-            <Link to="/adventures">
-              <Button size="lg" className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300">
-                <Sword className="h-5 w-5 mr-2" />
-                Start Your Adventure
-              </Button>
-            </Link>
+            <Button 
+              size="lg" 
+              className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300"
+              onClick={handleGetStarted}
+            >
+              <Sword className="h-5 w-5 mr-2" />
+              {isAuthenticated ? 'Start Your Adventure' : 'Get Started'}
+            </Button>
           </div>
         </div>
       </section>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialMode="signup"
+        onAuthSuccess={handleAuthSuccess}
+      />
     </div>
   )
 }
