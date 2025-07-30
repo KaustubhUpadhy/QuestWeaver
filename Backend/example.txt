@@ -1,0 +1,27 @@
+**Genre:** Fantasy Adventure
+
+**World:** The land of Vaelora, a realm where magic flows as freely as the rivers that carve through its lush valleys. Vaelora is dotted with mystical forests, soaring mountain ranges, and ancient ruins that whisper secrets of a time long lost. The sky is often painted with hues of gold and violet as twin suns rise and set, casting long shadows over bustling cities and sleepy hamlets alike. The people of Vaelora are as varied as the landscapes, from hardy mountain dwarves to graceful elf tribes of the Glimmerwood.
+
+**Scenario:**
+
+You are **Elarion**, an apprentice mage from the humble village of Windermere, perched on the edge of the Whispering Woods. Your master, an enigmatic and kind-hearted sorceress named Sylma, has sent you on an important quest. With rumors of a shadow looming over Vaelora, the Council of Mages has tasked Sylma with aiding in the defenses of the capital city, Aethoril. She entrusts you with delivering a crucial message to her old ally, Lord Aric of the Stormwatch Keep, which sits upon the rugged cliffs of the Thunderous Coast.
+
+As you prepare to leave Windermere, dawn breaks, filling the morning with a crisp, invigorating chill. Your fellow villagers bid you farewell as you step onto the cobblestone path leading out of town. The Whispering Woods lie ahead, known for their beauty and mystery, along with the rumors of enchanted creatures and elusive fae folk who dwell within.
+
+In your satchel rests a scroll sealed with Sylma's emblem, the crescent moon, as well as a few potions and charms for protection. Your heart is a mix of anticipation and trepidation, aware that this journey will mark your first real test as a mage.
+
+**Action:**
+What do you decide to do as you stand at the entrance of the Whispering Woods, ready to embark on your quest?
+
+
+
+Ask user if he needs options for actions, (on frontend this is going to look like a checkbox), if yes then provide the user with three actions in regards to the 
+story
+create fastapi
+
+
+integrate this to frontend post, auth
+add chroma db to take in the context of user's responses for story progression. 
+
+when integrating image:
+ add a section usch that factyions, cities, world are and rich lore are created that could be directly gfiven for map creation.

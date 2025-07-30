@@ -10,7 +10,7 @@ import Header from '@/components/Header'
 const Home = () => {
   const [activeFeature, setActiveFeature] = useState(0)
   const [authModalOpen, setAuthModalOpen] = useState(false)
-  const { isAuthenticated, login } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
   
   const features = [
     {
@@ -48,13 +48,22 @@ const Home = () => {
   }
 
   const handleAuthSuccess = () => {
-    // Simulate successful authentication
-    const mockUser = {
-      id: '1',
-      name: 'Adventure Seeker',
-      email: 'user@example.com'
-    }
-    login(mockUser)
+    setAuthModalOpen(false)
+    // The auth context will handle the user state automatically
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[80vh]">
+          <div className="animate-pulse text-center">
+            <div className="w-16 h-16 bg-primary/20 rounded-full mx-auto mb-4"></div>
+            <div className="h-4 bg-muted rounded w-32 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
