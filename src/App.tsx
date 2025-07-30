@@ -4,6 +4,7 @@ import Home from '@/pages/Home'
 import Adventures from '@/pages/Adventures'
 import About from '@/pages/About'
 import NotFound from '@/pages/NotFound'
+import AuthCallback from '@/pages/AuthCallback'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="/adventures" element={<Adventures />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<NotFound />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

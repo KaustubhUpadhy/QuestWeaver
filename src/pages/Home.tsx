@@ -10,7 +10,7 @@ import Header from '@/components/Header'
 const Home = () => {
   const [activeFeature, setActiveFeature] = useState(0)
   const [authModalOpen, setAuthModalOpen] = useState(false)
-  const { isAuthenticated, login } = useAuth()
+  const { isAuthenticated } = useAuth()
   
   const features = [
     {
@@ -45,16 +45,6 @@ const Home = () => {
       // Open signup modal if not authenticated
       setAuthModalOpen(true)
     }
-  }
-
-  const handleAuthSuccess = () => {
-    // Simulate successful authentication
-    const mockUser = {
-      id: '1',
-      name: 'Adventure Seeker',
-      email: 'user@example.com'
-    }
-    login(mockUser)
   }
 
   return (
@@ -174,7 +164,6 @@ const Home = () => {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialMode="signup"
-        onAuthSuccess={handleAuthSuccess}
       />
     </div>
   )
