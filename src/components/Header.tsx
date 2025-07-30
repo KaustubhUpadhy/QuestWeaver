@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Sword, MessageSquare, Info, LogIn, LogOut, Menu, User } from "lucide-react";
+import { Sword, MessageSquare, Info, LogIn, Menu } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/components/AuthContext";
 import AuthModal from "@/components/AuthModal";
@@ -9,13 +9,13 @@ const Header = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const { isAuthenticated, signOut, user } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
 
-  const handleAuthClick = async () => {
+  const handleAuthClick = () => {
     if (isAuthenticated) {
-      await signOut();
+      logout();
     } else {
       setAuthModalOpen(true);
     }
@@ -64,35 +64,16 @@ const Header = () => {
 
           {/* Right side actions */}
           <div className="flex items-center space-x-3">
-            {/* User info or Login button */}
-            {isAuthenticated ? (
-              <div className="hidden sm:flex items-center space-x-3">
-                <div className="flex items-center space-x-2 text-sm">
-                  <User className="h-4 w-4" />
-                  <span className="text-muted-foreground">
-                    {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Adventurer'}
-                  </span>
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleAuthClick}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </div>
-            ) : (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="hidden sm:flex"
-                onClick={handleAuthClick}
-              >
-                <LogIn className="h-4 w-4 mr-2" />
-                Login
-              </Button>
-            )}
+            {/* Login/Logout button */}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hidden sm:flex"
+              onClick={handleAuthClick}
+            >
+              <LogIn className="h-4 w-4 mr-2" />
+              {isAuthenticated ? 'Logout' : 'Login'}
+            </Button>
 
             {/* Mobile menu button */}
             <Button 
@@ -135,38 +116,18 @@ const Header = () => {
                   <span>About</span>
                 </Link>
 
-                {isAuthenticated ? (
-                  <div className="pt-2 border-t border-border">
-                    <div className="text-sm text-muted-foreground mb-2 px-3">
-                      Welcome, {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Adventurer'}!
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="w-full"
-                      onClick={() => {
-                        handleAuthClick();
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Logout
-                    </Button>
-                  </div>
-                ) : (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="mt-4"
-                    onClick={() => {
-                      handleAuthClick();
-                      setMobileMenuOpen(false);
-                    }}
-                  >
-                    <LogIn className="h-4 w-4 mr-2" />
-                    Login
-                  </Button>
-                )}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-4"
+                  onClick={() => {
+                    handleAuthClick();
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <LogIn className="h-4 w-4 mr-2" />
+                  {isAuthenticated ? 'Logout' : 'Login'}
+                </Button>
               </nav>
             </div>
           )}
@@ -178,6 +139,16 @@ const Header = () => {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialMode="login"
+        onAuthSuccess={() => {
+          // Simulate successful authentication
+          const mockUser = {
+            id: '1',
+            name: 'Adventure Seeker',
+            email: 'user@example.com'
+          };
+          // This would typically be handled by the AuthModal component
+          console.log('Auth successful');
+        }}
       />
     </>
   );
