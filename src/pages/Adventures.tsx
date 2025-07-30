@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MessageSquare, Plus, Settings, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { useAuth } from '@/components/AuthContext'
+import AuthModal from '@/components/AuthModal'
 import Header from '@/components/Header'
 
 interface Chat {
@@ -19,6 +21,16 @@ const Adventures = () => {
   const [selectedChat, setSelectedChat] = useState<string | null>(mockChats[0]?.id || null)
   const [searchQuery, setSearchQuery] = useState('')
   const [message, setMessage] = useState('')
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  
+  const { isAuthenticated, isLoading } = useAuth()
+
+  // Redirect unauthenticated users
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      setShowAuthModal(true)
+    }
+  }, [isAuthenticated, isLoading])
 
   const filteredChats = mockChats.filter(chat =>
     chat.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -39,6 +51,58 @@ const Adventures = () => {
       e.preventDefault()
       handleSendMessage()
     }
+  }
+
+  const handleAuthSuccess = () => {
+    setShowAuthModal(false)
+  }
+
+  // Show loading while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[80vh]">
+          <div className="animate-pulse text-center">
+            <div className="w-16 h-16 bg-primary/20 rounded-full mx-auto mb-4"></div>
+            <div className="h-4 bg-muted rounded w-32 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show auth modal if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[80vh]">
+          <div className="text-center space-y-6 p-8">
+            <MessageSquare className="h-24 w-24 mx-auto text-primary/50" />
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold">Access Restricted</h2>
+              <p className="text-muted-foreground max-w-md">
+                You need to create an account or sign in to access your adventures.
+              </p>
+            </div>
+            <Button 
+              onClick={() => setShowAuthModal(true)}
+              className="gradient-primary shadow-glow"
+            >
+              Create Account
+            </Button>
+          </div>
+        </div>
+        
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          initialMode="signup"
+          onAuthSuccess={handleAuthSuccess}
+        />
+      </div>
+    )
   }
 
   return (

@@ -17,6 +17,10 @@ What do you decide to do as you stand at the entrance of the Whispering Woods, r
 
 Ask user if he needs options for actions, (on frontend this is going to look like a checkbox), if yes then provide the user with three actions in regards to the 
 story
+type of world they want, story setting, ex: dark fantasy, sci-fi etc.
+Character they will be playing; multiple , single character with specifics,
+Any other additions: specific factions or stuff etc.
+
 create fastapi
 
 

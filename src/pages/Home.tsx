@@ -79,46 +79,46 @@ const Home = () => {
         <div className="relative container mx-auto px-4 pt-20 pb-32">
           <div className="flex justify-center">
             {/* Centered Content */}
-            <div className="max-w-4xl text-center space-y-8 animate-fade-in">
-              {/* Main Headline */}
-              <div className="space-y-6">
-                <h1 className="text-5xl md:text-7xl font-bold leading-tight animate-fade-in">
+            <div className="max-w-6xl text-center space-y-10 animate-fade-in">
+              {/* Main Headline - INCREASED TEXT SIZES */}
+              <div className="space-y-8">
+                <h1 className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold leading-tight animate-fade-in">
                   <span className="block animate-slide-up">Craft Your Adventure</span>
                   <span className="block text-primary animate-glow animate-slide-up animate-delay-300">
                     As You Live It
                   </span>
                 </h1>
-                <p className="text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-in animate-delay-500">
+                <p className="text-2xl md:text-3xl lg:text-4xl text-muted-foreground max-w-4xl mx-auto animate-fade-in animate-delay-500 leading-relaxed">
                   AI-powered storytelling where your choices shape the narrative. 
                   Create unlimited stories that respond to your every decision.
                 </p>
               </div>
 
-              {/* CTA Button */}
+              {/* CTA Button - LARGER BUTTON */}
               <div className="flex justify-center animate-fade-in animate-delay-700">
                 {isAuthenticated ? (
                   <Link to="/adventures">
-                    <Button size="lg" className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300 group animate-bounce-gentle">
-                      <Sparkles className="h-5 w-5 mr-2 group-hover:animate-spin" />
+                    <Button size="lg" className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300 group animate-bounce-gentle text-xl px-12 py-6">
+                      <Sparkles className="h-6 w-6 mr-3 group-hover:animate-spin" />
                       Start My Adventure Now
-                      <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                      <ArrowRight className="h-5 w-5 ml-3 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </Link>
                 ) : (
                   <Button 
                     size="lg" 
-                    className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300 group animate-bounce-gentle"
+                    className="gradient-primary shadow-glow hover:shadow-elegant transition-all duration-300 group animate-bounce-gentle text-xl px-12 py-6"
                     onClick={handleGetStarted}
                   >
-                    <Sparkles className="h-5 w-5 mr-2 group-hover:animate-spin" />
+                    <Sparkles className="h-6 w-6 mr-3 group-hover:animate-spin" />
                     Get Started
-                    <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight className="h-5 w-5 ml-3 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 )}
               </div>
 
-              {/* Additional Info */}
-              <p className="text-sm text-muted-foreground animate-fade-in animate-delay-1000">
+              {/* Additional Info - LARGER TEXT */}
+              <p className="text-lg md:text-xl text-muted-foreground animate-fade-in animate-delay-1000">
                 100% Free to start • Create unlimited stories • No credit card needed
               </p>
             </div>
