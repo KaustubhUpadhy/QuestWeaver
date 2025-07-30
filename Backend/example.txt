@@ -15,12 +15,9 @@ What do you decide to do as you stand at the entrance of the Whispering Woods, r
 
 
 
-Ask user if he needs options for actions, (on frontend this is going to look like a checkbox), if yes then provide the user with three actions in regards to the 
-story
-type of world they want, story setting, ex: dark fantasy, sci-fi etc.
-Character they will be playing; multiple , single character with specifics,
-Any other additions: specific factions or stuff etc.
+Ask user if he needs options for actions, (on frontend this is going to look like a checkbox), 
 
+look out how to make the agent /wrapper interactive such that it would take user's responses back and then reply back accordingly to the responses
 create fastapi
 
 
@@ -28,4 +25,4 @@ integrate this to frontend post, auth
 add chroma db to take in the context of user's responses for story progression. 
 
 when integrating image:
- add a section usch that factyions, cities, world are and rich lore are created that could be directly gfiven for map creation.
+ add a section usch that factyions, cities, world are and rich lore are created that could be directly given for map creation.
