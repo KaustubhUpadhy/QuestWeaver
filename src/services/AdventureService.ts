@@ -42,6 +42,7 @@ interface SessionInfo {
   created_at: string
   last_updated: string
   message_count: number
+  last_message_preview: string
 }
 
 interface SessionsResponse {

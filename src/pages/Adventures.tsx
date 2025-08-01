@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { MessageSquare, Plus, Settings, Search, Trash2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { MessageSquare, Plus, Search, Trash2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthContext'
 import { AdventureService } from '@/services/AdventureService'
 import AuthModal from '@/components/AuthModal'
 import AdventureSetupModal from '@/components/AdventureSetupModal'
+import DeleteConfirmationModal from '@/components/DeleteConfirmationModal'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 import Header from '@/components/Header'
 
@@ -37,6 +38,10 @@ const Adventures = () => {
   const [loadingMessages, setLoadingMessages] = useState<Set<string>>(new Set())
   const [isLoadingAdventures, setIsLoadingAdventures] = useState(true)
   const [isLoadingConversation, setIsLoadingConversation] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [adventureToDelete, setAdventureToDelete] = useState<Adventure | null>(null)
+  const [isDeletingAdventure, setIsDeletingAdventure] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const { isAuthenticated, isLoading } = useAuth()
 
@@ -98,21 +103,25 @@ const Adventures = () => {
     
     setIsLoadingAdventures(true)
     try {
+      console.log('Loading user adventures from database...')
       const response = await AdventureService.getUserSessions()
       
       const adventureList: Adventure[] = response.sessions.map(session => ({
         sessionId: session.session_id,
         title: session.title,
-        lastMessage: extractPreview(session.title), // We'll use title as preview for now
-        timestamp: session.created_at,
+        lastMessage: session.last_message_preview || extractPreview(session.title),
+        timestamp: session.last_updated || session.created_at,
         messageCount: session.message_count,
         messages: [],
         isLoaded: false
       }))
       
+      console.log(`Loaded ${adventureList.length} adventures from database`)
       setAdventures(adventureList)
     } catch (error) {
       console.error('Failed to load adventures:', error)
+      // Show user-friendly error message
+      alert('Failed to load your adventures. Please refresh the page.')
     } finally {
       setIsLoadingAdventures(false)
     }
@@ -124,11 +133,14 @@ const Adventures = () => {
 
     setIsLoadingConversation(true)
     try {
+      console.log(`Loading conversation history for adventure: ${adventure.title}`)
       const response = await AdventureService.getSessionHistory(adventure.sessionId)
+      
+      console.log(`Loaded ${response.messages.length} messages for adventure`)
       
       const updatedAdventure: Adventure = {
         ...adventure,
-        messages: response.messages,
+        messages: response.messages, // Messages are already ordered by timestamp ASC from backend
         isLoaded: true
       }
       
@@ -140,6 +152,7 @@ const Adventures = () => {
       return updatedAdventure
     } catch (error) {
       console.error('Failed to load conversation:', error)
+      alert('Failed to load conversation history. Please try again.')
       return adventure
     } finally {
       setIsLoadingConversation(false)
@@ -149,6 +162,17 @@ const Adventures = () => {
   const filteredAdventures = adventures.filter(adventure =>
     adventure.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    if (selectedAdventure && selectedAdventure.messages.length > 0) {
+      scrollToBottom()
+    }
+  }, [selectedAdventure?.messages.length])
 
   // Load adventures when authenticated
   useEffect(() => {
@@ -289,36 +313,60 @@ const Adventures = () => {
   }
 
   const handleSelectAdventure = async (adventure: Adventure) => {
+    console.log(`Selecting adventure: ${adventure.title} (${adventure.messageCount} messages)`)
     setSelectedAdventure(adventure)
     
     // Load full conversation if not already loaded
     if (!adventure.isLoaded) {
+      console.log('Loading conversation history from database...')
       const loadedAdventure = await loadConversation(adventure)
       setSelectedAdventure(loadedAdventure)
+    } else {
+      console.log('Using cached conversation history')
     }
   }
 
-  const handleDeleteAdventure = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation() // Prevent adventure selection
-    
-    if (!confirm('Are you sure you want to delete this adventure? This action cannot be undone.')) {
-      return
+  const handleDeleteAdventure = async (adventure: Adventure, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation() // Prevent adventure selection when clicking from sidebar
     }
     
+    // Show confirmation modal
+    setAdventureToDelete(adventure)
+    setShowDeleteModal(true)
+  }
+
+  const confirmDeleteAdventure = async () => {
+    if (!adventureToDelete) return
+    
+    setIsDeletingAdventure(true)
+    
     try {
-      await AdventureService.deleteSession(sessionId)
+      await AdventureService.deleteSession(adventureToDelete.sessionId)
       
       // Remove from local state
-      setAdventures(prev => prev.filter(adv => adv.sessionId !== sessionId))
+      setAdventures(prev => prev.filter(adv => adv.sessionId !== adventureToDelete.sessionId))
       
       // If this was the selected adventure, clear selection
-      if (selectedAdventure?.sessionId === sessionId) {
+      if (selectedAdventure?.sessionId === adventureToDelete.sessionId) {
         setSelectedAdventure(null)
       }
+      
+      // Close modal
+      setShowDeleteModal(false)
+      setAdventureToDelete(null)
     } catch (error) {
       console.error('Failed to delete adventure:', error)
       alert('Failed to delete adventure. Please try again.')
+    } finally {
+      setIsDeletingAdventure(false)
     }
+  }
+
+  const cancelDeleteAdventure = () => {
+    setShowDeleteModal(false)
+    setAdventureToDelete(null)
+    setIsDeletingAdventure(false)
   }
 
   // Show loading while checking auth
@@ -374,13 +422,31 @@ const Adventures = () => {
       <Header />
       <div className="flex h-[calc(100vh-64px)] overflow-hidden">
         {/* Adventure Sidebar */}
-        <div className="w-80 border-r bg-card">
-          <div className="p-4 space-y-4">
+        <div className="w-80 border-r bg-card flex flex-col">
+          <div className="p-4 space-y-4 border-b">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Adventures</h2>
-              <Button size="sm" variant="ghost" onClick={handleStartAdventure}>
-                <Plus className="h-4 w-4" />
-              </Button>
+              <h2 className="text-lg font-semibold text-foreground">Adventures</h2>
+              <div className="flex items-center gap-1">
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={loadAdventures}
+                  disabled={isLoadingAdventures}
+                  title="Refresh adventures"
+                  className="h-8 w-8 p-0"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoadingAdventures ? 'animate-spin' : ''}`} />
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={handleStartAdventure}
+                  title="Start new adventure"
+                  className="h-8 w-8 p-0"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             
             <div className="relative">
@@ -394,7 +460,7 @@ const Adventures = () => {
             </div>
           </div>
 
-          <div className="h-full overflow-y-auto pb-4">
+          <div className="flex-1 overflow-y-auto">
             {isLoadingAdventures ? (
               <div className="flex items-center justify-center h-32">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -433,7 +499,8 @@ const Adventures = () => {
                         size="sm"
                         variant="ghost"
                         className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
-                        onClick={(e) => handleDeleteAdventure(adventure.sessionId, e)}
+                        onClick={(e) => handleDeleteAdventure(adventure, e)}
+                        title="Delete adventure"
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -460,22 +527,32 @@ const Adventures = () => {
         </div>
 
         {/* Adventure Content */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col bg-background">
           {selectedAdventure ? (
             <>
-              <div className="p-4 border-b bg-card">
+              {/* Chat Header */}
+              <div className="p-4 border-b bg-card/50 backdrop-blur-sm">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h1 className="text-xl font-semibold">{selectedAdventure.title}</h1>
+                    <h1 className="text-xl font-semibold text-foreground">{selectedAdventure.title}</h1>
                     <p className="text-sm text-muted-foreground">Continue your adventure...</p>
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <Settings className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => handleDeleteAdventure(selectedAdventure)}
+                      className="text-muted-foreground hover:text-red-500 transition-colors"
+                      title="Delete this adventure"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 p-6 overflow-y-auto bg-background">
+              {/* Messages Area */}
+              <div className="flex-1 p-6 overflow-y-auto">
                 {isLoadingConversation ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
@@ -484,28 +561,32 @@ const Adventures = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4 max-w-5xl">
+                  <div className="space-y-6 max-w-4xl mx-auto">
                     {/* Display conversation history */}
                     {selectedAdventure.messages.map((msg) => (
                       <div key={msg.id} className="flex gap-4">
                         {msg.role === 'user' ? (
                           <>
                             <div className="flex-1" />
-                            <div className="bg-primary text-primary-foreground p-4 rounded-lg max-w-2xl">
-                              <div className="text-sm leading-relaxed">
+                            <div className="bg-primary text-primary-foreground p-4 rounded-2xl max-w-2xl shadow-sm">
+                              <div className="text-sm leading-relaxed whitespace-pre-wrap">
                                 {msg.content}
                               </div>
                             </div>
-                            <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-                              <AvatarFallback className="bg-foreground text-background">You</AvatarFallback>
+                            <Avatar className="h-8 w-8 flex-shrink-0 mt-1 ring-2 ring-primary/20">
+                              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+                                You
+                              </AvatarFallback>
                             </Avatar>
                           </>
                         ) : (
                           <>
-                            <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-                              <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
+                            <Avatar className="h-8 w-8 flex-shrink-0 mt-1 ring-2 ring-primary/20">
+                              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+                                AI
+                              </AvatarFallback>
                             </Avatar>
-                            <div className="bg-card/50 p-6 rounded-lg flex-1 border border-border/50 backdrop-blur-sm">
+                            <div className="bg-card/80 backdrop-blur-sm p-6 rounded-2xl flex-1 border border-border/30 shadow-sm">
                               <MarkdownRenderer 
                                 content={msg.content}
                                 className="text-sm text-foreground leading-relaxed"
@@ -519,10 +600,12 @@ const Adventures = () => {
                     {/* Loading indicator for AI response */}
                     {isCurrentChatLoading && (
                       <div className="flex gap-4">
-                        <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-                          <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
+                        <Avatar className="h-8 w-8 flex-shrink-0 mt-1 ring-2 ring-primary/20">
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+                            AI
+                          </AvatarFallback>
                         </Avatar>
-                        <div className="bg-card/50 p-6 rounded-lg flex-1 border border-border/50 backdrop-blur-sm">
+                        <div className="bg-card/80 backdrop-blur-sm p-6 rounded-2xl flex-1 border border-border/30 shadow-sm">
                           <div className="flex items-center space-x-2 text-muted-foreground">
                             <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
                             <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -532,49 +615,63 @@ const Adventures = () => {
                         </div>
                       </div>
                     )}
+
+                    {/* Scroll anchor */}
+                    <div ref={messagesEndRef} />
                   </div>
                 )}
               </div>
 
+              {/* Input Area */}
               <div className="p-4 border-t bg-card/95 backdrop-blur-sm">
-                <div className="flex gap-2">
-                  <Input 
-                    placeholder="What do you want to do next?" 
-                    className="flex-1"
-                    value={currentMessage}
-                    onChange={(e) => selectedAdventure && updateMessageForChat(selectedAdventure.sessionId, e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    disabled={isCurrentChatLoading || isLoadingConversation}
-                  />
-                  <Button 
-                    onClick={handleSendMessage} 
-                    disabled={!currentMessage.trim() || isCurrentChatLoading || isLoadingConversation}
-                    className="min-w-[80px]"
-                  >
-                    {isCurrentChatLoading ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Send
-                      </>
-                    )}
-                  </Button>
+                <div className="max-w-4xl mx-auto">
+                  <div className="flex gap-3">
+                    <Input 
+                      placeholder="What do you want to do next?" 
+                      className="flex-1 bg-background/50 border-border/50 focus:border-primary rounded-xl px-4 py-3"
+                      value={currentMessage}
+                      onChange={(e) => selectedAdventure && updateMessageForChat(selectedAdventure.sessionId, e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      disabled={isCurrentChatLoading || isLoadingConversation}
+                    />
+                    <Button 
+                      onClick={handleSendMessage} 
+                      disabled={!currentMessage.trim() || isCurrentChatLoading || isLoadingConversation}
+                      className="min-w-[90px] gradient-primary shadow-sm rounded-xl px-6"
+                    >
+                      {isCurrentChatLoading ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <MessageSquare className="h-4 w-4 mr-2" />
+                          Send
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>
           ) : (
+            /* Welcome Screen */
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <div className="text-center space-y-6">
-                <MessageSquare className="h-16 w-16 mx-auto opacity-50" />
-                <div className="space-y-2">
-                  <h3 className="text-xl font-semibold">Welcome to DungeonCraft AI</h3>
-                  <p className="text-muted-foreground max-w-md">
-                    Ready to embark on an epic adventure? Create your first story and let AI guide your journey through unlimited possibilities.
-                  </p>
+              <div className="text-center space-y-8 max-w-md">
+                <div className="space-y-4">
+                  <div className="w-20 h-20 mx-auto bg-gradient-to-br from-primary to-primary/60 rounded-2xl flex items-center justify-center shadow-lg">
+                    <MessageSquare className="h-10 w-10 text-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-bold text-foreground">Welcome to DungeonCraft AI</h3>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Ready to embark on an epic adventure? Create your first story and let AI guide your journey through unlimited possibilities.
+                    </p>
+                  </div>
                 </div>
-                <Button className="gradient-primary shadow-glow" onClick={handleStartAdventure}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <Button 
+                  className="gradient-primary shadow-glow px-8 py-3 rounded-xl font-medium" 
+                  onClick={handleStartAdventure}
+                >
+                  <Plus className="h-5 w-5 mr-2" />
                   Start New Adventure
                 </Button>
               </div>
@@ -588,6 +685,15 @@ const Adventures = () => {
         isOpen={showAdventureModal}
         onClose={() => setShowAdventureModal(false)}
         onAdventureCreated={handleAdventureCreated}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={cancelDeleteAdventure}
+        onConfirm={confirmDeleteAdventure}
+        adventureTitle={adventureToDelete?.title || ''}
+        isDeleting={isDeletingAdventure}
       />
     </div>
   )

@@ -155,17 +155,18 @@ async def save_message_to_db(chat_id: str, user_id: str, role: str, content: str
         return None
 
 async def get_chat_history(chat_id: str, user_id: str):
-    """Get full chat history from database"""
+    """Get full chat history from database with proper ordering"""
     try:
-        # Get chat info
+        # Get chat info first
         chat_result = supabase_admin.table("chats").select("*").eq("id", chat_id).eq("user_id", user_id).execute()
         if not chat_result.data:
             return None
         
         chat_info = chat_result.data[0]
         
-        # Get messages ordered by sequence number
-        messages_result = supabase_admin.table("chat_messages").select("*").eq("chat_id", chat_id).order("sequence_number").execute()
+        # Get messages ordered by timestamp ASC (chronological order) with id as tiebreaker
+        # This ensures proper conversation flow from start to finish
+        messages_result = supabase_admin.table("chat_messages").select("*").eq("chat_id", chat_id).eq("user_id", user_id).order("timestamp", desc=False).order("id", desc=False).execute()
         
         messages = []
         for msg in messages_result.data:
@@ -176,6 +177,8 @@ async def get_chat_history(chat_id: str, user_id: str):
                 "timestamp": msg["timestamp"]
             })
         
+        print(f"Retrieved {len(messages)} messages for chat {chat_id}")
+        
         return {
             "chat_info": chat_info,
             "messages": messages
@@ -185,10 +188,31 @@ async def get_chat_history(chat_id: str, user_id: str):
         return None
 
 async def get_user_chats(user_id: str):
-    """Get all chats for a user"""
+    """Get all chats for a user with proper ordering and last message preview"""
     try:
-        result = supabase_admin.table("chats").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-        return result.data
+        # Get chats ordered by last_updated (most recent first)
+        chats_result = supabase_admin.table("chats").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        
+        chats_with_preview = []
+        for chat in chats_result.data:
+            # Get the last message for preview
+            last_message_result = supabase_admin.table("chat_messages").select("content, timestamp").eq("chat_id", chat["id"]).order("timestamp", desc=True).limit(1).execute()
+            
+            last_message_preview = ""
+            if last_message_result.data:
+                content = last_message_result.data[0]["content"]
+                # Extract preview (first 80 chars, avoiding title)
+                lines = content.split('\n')
+                preview_text = ' '.join(lines).replace('**', '').strip()
+                last_message_preview = preview_text[:80] + '...' if len(preview_text) > 80 else preview_text
+            
+            chat_with_preview = {
+                **chat,
+                "last_message_preview": last_message_preview
+            }
+            chats_with_preview.append(chat_with_preview)
+        
+        return chats_with_preview
     except Exception as e:
         print(f"Error getting user chats: {e}")
         return []
@@ -420,11 +444,11 @@ async def get_session_history(session_id: str, user_id: str = Depends(get_curren
 
 @app.get("/api/story/sessions")
 async def list_sessions(user_id: str = Depends(get_current_user)):
-    """List all sessions for the authenticated user"""
+    """List all sessions for the authenticated user with proper message previews"""
     try:
         chats = await get_user_chats(user_id)
         
-        # Get message count for each chat
+        # Get message count for each chat and format response
         sessions = []
         for chat in chats:
             message_count = await get_message_count(chat["id"])
@@ -434,8 +458,11 @@ async def list_sessions(user_id: str = Depends(get_current_user)):
                 "title": chat["title"],
                 "created_at": chat["created_at"],
                 "last_updated": chat.get("last_updated", chat["created_at"]),
-                "message_count": message_count
+                "message_count": message_count,
+                "last_message_preview": chat.get("last_message_preview", "")
             })
+        
+        print(f"Retrieved {len(sessions)} sessions for user {user_id}")
         
         return {
             "sessions": sessions,
@@ -443,6 +470,7 @@ async def list_sessions(user_id: str = Depends(get_current_user)):
         }
         
     except Exception as e:
+        print(f"Error listing sessions: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
 
 @app.delete("/api/story/session/{session_id}")

@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 instructiosn.txt
+src/components/EditableMessage.tsx
+
 world_create.py
 # Editor directories and files
 .vscode/*
