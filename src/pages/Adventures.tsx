@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MessageSquare, Plus, Settings, Search } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -12,7 +12,7 @@ import Header from '@/components/Header'
 
 interface Message {
   id: string
-  type: 'user' | 'ai'
+  role: 'user' | 'assistant'
   content: string
   timestamp: string
 }
@@ -22,18 +22,21 @@ interface Adventure {
   title: string
   lastMessage: string
   timestamp: string
-  storyContent: string
+  messageCount: number
   messages: Message[]
+  isLoaded: boolean // Track if full conversation is loaded
 }
 
 const Adventures = () => {
   const [adventures, setAdventures] = useState<Adventure[]>([])
   const [selectedAdventure, setSelectedAdventure] = useState<Adventure | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [messages, setMessages] = useState<{ [sessionId: string]: string }>({}) // Per-chat message state
+  const [messages, setMessages] = useState<{ [sessionId: string]: string }>({})
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showAdventureModal, setShowAdventureModal] = useState(false)
-  const [loadingMessages, setLoadingMessages] = useState<Set<string>>(new Set()) // Per-chat loading state
+  const [loadingMessages, setLoadingMessages] = useState<Set<string>>(new Set())
+  const [isLoadingAdventures, setIsLoadingAdventures] = useState(true)
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
   
   const { isAuthenticated, isLoading } = useAuth()
 
@@ -66,26 +69,22 @@ const Adventures = () => {
 
   // Helper function to extract title from story content
   const extractTitle = (content: string): string => {
-    // Look for **Title: something** pattern
     const titleMatch = content.match(/\*\*Title:\s*([^*]+)\*\*/i)
     if (titleMatch) {
       return titleMatch[1].trim()
     }
     
-    // Look for any text between ** at the beginning
     const boldMatch = content.match(/^\*\*([^*]+)\*\*/)
     if (boldMatch) {
       return boldMatch[1].trim()
     }
     
-    // Fallback: take first line and limit length
     const firstLine = content.split('\n')[0].replace(/\*\*/g, '').trim()
     return firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine
   }
 
-  // Helper function to extract preview text (non-title content)
+  // Helper function to extract preview text
   const extractPreview = (content: string): string => {
-    // Remove title line and get preview
     const lines = content.split('\n').filter(line => line.trim())
     const contentWithoutTitle = lines.slice(1).join(' ')
     return contentWithoutTitle.length > 80 
@@ -93,9 +92,70 @@ const Adventures = () => {
       : contentWithoutTitle
   }
 
+  // Load user's adventures from database
+  const loadAdventures = async () => {
+    if (!isAuthenticated) return
+    
+    setIsLoadingAdventures(true)
+    try {
+      const response = await AdventureService.getUserSessions()
+      
+      const adventureList: Adventure[] = response.sessions.map(session => ({
+        sessionId: session.session_id,
+        title: session.title,
+        lastMessage: extractPreview(session.title), // We'll use title as preview for now
+        timestamp: session.created_at,
+        messageCount: session.message_count,
+        messages: [],
+        isLoaded: false
+      }))
+      
+      setAdventures(adventureList)
+    } catch (error) {
+      console.error('Failed to load adventures:', error)
+    } finally {
+      setIsLoadingAdventures(false)
+    }
+  }
+
+  // Load full conversation for a specific adventure
+  const loadConversation = async (adventure: Adventure) => {
+    if (adventure.isLoaded) return adventure
+
+    setIsLoadingConversation(true)
+    try {
+      const response = await AdventureService.getSessionHistory(adventure.sessionId)
+      
+      const updatedAdventure: Adventure = {
+        ...adventure,
+        messages: response.messages,
+        isLoaded: true
+      }
+      
+      // Update the adventure in the list
+      setAdventures(prev => prev.map(adv => 
+        adv.sessionId === adventure.sessionId ? updatedAdventure : adv
+      ))
+      
+      return updatedAdventure
+    } catch (error) {
+      console.error('Failed to load conversation:', error)
+      return adventure
+    } finally {
+      setIsLoadingConversation(false)
+    }
+  }
+
   const filteredAdventures = adventures.filter(adventure =>
     adventure.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  // Load adventures when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadAdventures()
+    }
+  }, [isAuthenticated])
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -112,22 +172,19 @@ const Adventures = () => {
     const sessionId = selectedAdventure.sessionId
     const userMessage = currentMessage.trim()
     
-    // Set loading state for this specific chat
     setLoadingForChat(sessionId, true)
-    
-    // Clear input for this specific chat immediately
     updateMessageForChat(sessionId, '')
 
     try {
-      // Create user message
+      // Create user message object
       const userMessageObj: Message = {
         id: `user-${Date.now()}`,
-        type: 'user',
+        role: 'user',
         content: userMessage,
         timestamp: new Date().toISOString()
       }
 
-      // Add user message to the adventure
+      // Optimistically update the UI
       const updatedAdventure = {
         ...selectedAdventure,
         messages: [...selectedAdventure.messages, userMessageObj],
@@ -135,26 +192,24 @@ const Adventures = () => {
         timestamp: new Date().toISOString()
       }
 
-      // Update adventures list and selected adventure
       setAdventures(prev => prev.map(adv => 
         adv.sessionId === sessionId ? updatedAdventure : adv
       ))
       setSelectedAdventure(updatedAdventure)
 
-      // Send action to API
-      console.log('Sending action to API:', sessionId, userMessage)
+      // Send action to API (which will save to database)
       const response = await AdventureService.takeStoryAction(sessionId, userMessage)
 
       if (response.success) {
         // Create AI response message
         const aiMessageObj: Message = {
           id: `ai-${Date.now()}`,
-          type: 'ai',
+          role: 'assistant',
           content: response.story_content,
           timestamp: new Date().toISOString()
         }
 
-        // Add AI response to the adventure
+        // Update with AI response
         const finalAdventure = {
           ...updatedAdventure,
           messages: [...updatedAdventure.messages, aiMessageObj],
@@ -162,24 +217,29 @@ const Adventures = () => {
           timestamp: new Date().toISOString()
         }
 
-        // Update adventures list and selected adventure
         setAdventures(prev => prev.map(adv => 
           adv.sessionId === sessionId ? finalAdventure : adv
         ))
         
-        // Only update selected adventure if this chat is still selected
         setSelectedAdventure(current => 
           current?.sessionId === sessionId ? finalAdventure : current
         )
-        
-        console.log('AI response received:', response)
       } else {
         console.error('Failed to get AI response:', response.message)
+        // Revert optimistic update on error
+        setSelectedAdventure(selectedAdventure)
+        setAdventures(prev => prev.map(adv => 
+          adv.sessionId === sessionId ? selectedAdventure : adv
+        ))
       }
     } catch (error) {
       console.error('Error sending message:', error)
+      // Revert optimistic update on error
+      setSelectedAdventure(selectedAdventure)
+      setAdventures(prev => prev.map(adv => 
+        adv.sessionId === sessionId ? selectedAdventure : adv
+      ))
     } finally {
-      // Remove loading state for this specific chat
       setLoadingForChat(sessionId, false)
     }
   }
@@ -193,6 +253,7 @@ const Adventures = () => {
 
   const handleAuthSuccess = () => {
     setShowAuthModal(false)
+    loadAdventures()
   }
 
   const handleStartAdventure = () => {
@@ -202,31 +263,62 @@ const Adventures = () => {
   const handleAdventureCreated = (storyData: { sessionId: string; storyContent: string }) => {
     console.log('Adventure created:', storyData)
     
-    // Extract proper title from story content
     const title = extractTitle(storyData.storyContent)
     const preview = extractPreview(storyData.storyContent)
     
-    // Create new adventure object with empty messages array
+    // Create initial AI message from the story content
+    const initialMessage: Message = {
+      id: `ai-${Date.now()}`,
+      role: 'assistant',
+      content: storyData.storyContent,
+      timestamp: new Date().toISOString()
+    }
+    
     const newAdventure: Adventure = {
       sessionId: storyData.sessionId,
       title: title,
       lastMessage: preview,
       timestamp: new Date().toISOString(),
-      storyContent: storyData.storyContent,
-      messages: [] // Initialize empty conversation history
+      messageCount: 1,
+      messages: [initialMessage],
+      isLoaded: true
     }
     
-    // Add to adventures list
     setAdventures(prev => [newAdventure, ...prev])
-    
-    // Select the new adventure
     setSelectedAdventure(newAdventure)
-    
-    console.log('New adventure added to list:', newAdventure)
   }
 
-  const handleSelectAdventure = (adventure: Adventure) => {
+  const handleSelectAdventure = async (adventure: Adventure) => {
     setSelectedAdventure(adventure)
+    
+    // Load full conversation if not already loaded
+    if (!adventure.isLoaded) {
+      const loadedAdventure = await loadConversation(adventure)
+      setSelectedAdventure(loadedAdventure)
+    }
+  }
+
+  const handleDeleteAdventure = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent adventure selection
+    
+    if (!confirm('Are you sure you want to delete this adventure? This action cannot be undone.')) {
+      return
+    }
+    
+    try {
+      await AdventureService.deleteSession(sessionId)
+      
+      // Remove from local state
+      setAdventures(prev => prev.filter(adv => adv.sessionId !== sessionId))
+      
+      // If this was the selected adventure, clear selection
+      if (selectedAdventure?.sessionId === sessionId) {
+        setSelectedAdventure(null)
+      }
+    } catch (error) {
+      console.error('Failed to delete adventure:', error)
+      alert('Failed to delete adventure. Please try again.')
+    }
   }
 
   // Show loading while checking auth
@@ -303,27 +395,49 @@ const Adventures = () => {
           </div>
 
           <div className="h-full overflow-y-auto pb-4">
-            {filteredAdventures.length > 0 ? (
+            {isLoadingAdventures ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : filteredAdventures.length > 0 ? (
               <div className="space-y-2 p-2">
                 {filteredAdventures.map((adventure) => (
                   <div
                     key={adventure.sessionId}
                     onClick={() => handleSelectAdventure(adventure)}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                    className={`p-3 rounded-lg cursor-pointer transition-colors group ${
                       selectedAdventure?.sessionId === adventure.sessionId
                         ? 'bg-primary/20 border border-primary/30'
                         : 'hover:bg-muted/20'
                     }`}
                   >
-                    <h3 className="font-medium text-foreground text-sm truncate mb-1">
-                      {adventure.title}
-                    </h3>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {adventure.lastMessage}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(adventure.timestamp).toLocaleDateString()}
-                    </p>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-foreground text-sm truncate mb-1">
+                          {adventure.title}
+                        </h3>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {adventure.lastMessage}
+                        </p>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(adventure.timestamp).toLocaleDateString()}
+                          </p>
+                          <span className="text-xs text-muted-foreground">
+                            {adventure.messageCount} messages
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
+                        onClick={(e) => handleDeleteAdventure(adventure.sessionId, e)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -362,68 +476,64 @@ const Adventures = () => {
               </div>
 
               <div className="flex-1 p-6 overflow-y-auto bg-background">
-                <div className="space-y-4 max-w-5xl">
-                  {/* Display the initial story content */}
-                  <div className="flex gap-4">
-                    <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-                      <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
-                    </Avatar>
-                    <div className="bg-card/50 p-6 rounded-lg flex-1 border border-border/50 backdrop-blur-sm">
-                      <MarkdownRenderer 
-                        content={selectedAdventure.storyContent}
-                        className="text-sm text-foreground leading-relaxed"
-                      />
+                {isLoadingConversation ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                      <p className="text-muted-foreground">Loading conversation...</p>
                     </div>
                   </div>
-
-                  {/* Display conversation history */}
-                  {selectedAdventure.messages.map((msg) => (
-                    <div key={msg.id} className="flex gap-4">
-                      {msg.type === 'user' ? (
-                        <>
-                          <div className="flex-1" />
-                          <div className="bg-primary text-primary-foreground p-4 rounded-lg max-w-2xl">
-                            <div className="text-sm leading-relaxed">
-                              {msg.content}
+                ) : (
+                  <div className="space-y-4 max-w-5xl">
+                    {/* Display conversation history */}
+                    {selectedAdventure.messages.map((msg) => (
+                      <div key={msg.id} className="flex gap-4">
+                        {msg.role === 'user' ? (
+                          <>
+                            <div className="flex-1" />
+                            <div className="bg-primary text-primary-foreground p-4 rounded-lg max-w-2xl">
+                              <div className="text-sm leading-relaxed">
+                                {msg.content}
+                              </div>
                             </div>
-                          </div>
-                          <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-                            <AvatarFallback className="bg-foreground text-background">You</AvatarFallback>
-                          </Avatar>
-                        </>
-                      ) : (
-                        <>
-                          <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-                            <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
-                          </Avatar>
-                          <div className="bg-card/50 p-6 rounded-lg flex-1 border border-border/50 backdrop-blur-sm">
-                            <MarkdownRenderer 
-                              content={msg.content}
-                              className="text-sm text-foreground leading-relaxed"
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                            <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
+                              <AvatarFallback className="bg-foreground text-background">You</AvatarFallback>
+                            </Avatar>
+                          </>
+                        ) : (
+                          <>
+                            <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
+                              <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
+                            </Avatar>
+                            <div className="bg-card/50 p-6 rounded-lg flex-1 border border-border/50 backdrop-blur-sm">
+                              <MarkdownRenderer 
+                                content={msg.content}
+                                className="text-sm text-foreground leading-relaxed"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
 
-                  {/* Loading indicator for AI response */}
-                  {isCurrentChatLoading && (
-                    <div className="flex gap-4">
-                      <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-                        <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
-                      </Avatar>
-                      <div className="bg-card/50 p-6 rounded-lg flex-1 border border-border/50 backdrop-blur-sm">
-                        <div className="flex items-center space-x-2 text-muted-foreground">
-                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                          <span className="text-sm">AI is thinking...</span>
+                    {/* Loading indicator for AI response */}
+                    {isCurrentChatLoading && (
+                      <div className="flex gap-4">
+                        <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
+                          <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
+                        </Avatar>
+                        <div className="bg-card/50 p-6 rounded-lg flex-1 border border-border/50 backdrop-blur-sm">
+                          <div className="flex items-center space-x-2 text-muted-foreground">
+                            <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                            <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <span className="text-sm">AI is thinking...</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="p-4 border-t bg-card/95 backdrop-blur-sm">
@@ -434,11 +544,11 @@ const Adventures = () => {
                     value={currentMessage}
                     onChange={(e) => selectedAdventure && updateMessageForChat(selectedAdventure.sessionId, e.target.value)}
                     onKeyPress={handleKeyPress}
-                    disabled={isCurrentChatLoading}
+                    disabled={isCurrentChatLoading || isLoadingConversation}
                   />
                   <Button 
                     onClick={handleSendMessage} 
-                    disabled={!currentMessage.trim() || isCurrentChatLoading}
+                    disabled={!currentMessage.trim() || isCurrentChatLoading || isLoadingConversation}
                     className="min-w-[80px]"
                   >
                     {isCurrentChatLoading ? (

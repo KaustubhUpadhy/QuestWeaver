@@ -1,140 +1,181 @@
-// API service for adventure generation
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { supabase } from '@/lib/supabase'
 
-export interface StoryInitRequest {
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
+interface StoryInitRequest {
   genre: string
   character: string
-  world_additions: string
-  actions: string
+  worldAdditions: string
+  actions: 'yes' | 'no'
 }
 
-export interface StoryResponse {
+interface StoryResponse {
   session_id: string
   story_content: string
   success: boolean
   message?: string
 }
 
-export interface StoryActionRequest {
+interface StoryActionRequest {
+  sessionId: string
+  userAction: string
+}
+
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+}
+
+interface ChatHistoryResponse {
   session_id: string
-  user_action: string
+  title: string
+  system_prompt: string
+  messages: ChatMessage[]
+  success: boolean
+}
+
+interface SessionInfo {
+  session_id: string
+  title: string
+  created_at: string
+  last_updated: string
+  message_count: number
+}
+
+interface SessionsResponse {
+  sessions: SessionInfo[]
+  total_sessions: number
+}
+
+// Helper function to get authorization headers
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  if (!session?.access_token) {
+    throw new Error('No authentication token found')
+  }
+  
+  return {
+    'Authorization': `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json'
+  }
 }
 
 export class AdventureService {
-  /**
-   * Initialize a new story with user preferences
-   */
-  static async initializeStory(preferences: {
-    genre: string
-    character: string
-    worldAdditions: string
-    actions: 'yes' | 'no'
-  }): Promise<StoryResponse> {
+  static async initializeStory(request: StoryInitRequest): Promise<StoryResponse> {
     try {
-      const requestData: StoryInitRequest = {
-        genre: preferences.genre,
-        character: preferences.character,
-        world_additions: preferences.worldAdditions,
-        actions: preferences.actions
-      }
-
-      console.log('Sending story init request:', requestData)
-
+      const headers = await getAuthHeaders()
+      
       const response = await fetch(`${API_BASE_URL}/api/story/init`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
+        headers,
+        body: JSON.stringify({
+          genre: request.genre,
+          character: request.character,
+          world_additions: request.worldAdditions,
+          actions: request.actions
+        })
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to initialize story')
       }
 
-      const result: StoryResponse = await response.json()
-      console.log('Story initialized successfully:', result)
-      
-      return result
+      return await response.json()
     } catch (error) {
-      console.error('Failed to initialize story:', error)
-      throw new Error(error instanceof Error ? error.message : 'Failed to initialize story')
+      console.error('AdventureService.initializeStory error:', error)
+      throw error
     }
   }
 
-  /**
-   * Continue a story with a user action
-   */
   static async takeStoryAction(sessionId: string, userAction: string): Promise<StoryResponse> {
     try {
-      const requestData: StoryActionRequest = {
-        session_id: sessionId,
-        user_action: userAction
-      }
-
-      console.log('Sending story action request:', requestData)
-
+      const headers = await getAuthHeaders()
+      
       const response = await fetch(`${API_BASE_URL}/api/story/action`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
+        headers,
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_action: userAction
+        })
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to process action')
       }
 
-      const result: StoryResponse = await response.json()
-      console.log('Story action processed successfully:', result)
+      return await response.json()
+    } catch (error) {
+      console.error('AdventureService.takeStoryAction error:', error)
+      throw error
+    }
+  }
+
+  static async getSessionHistory(sessionId: string): Promise<ChatHistoryResponse> {
+    try {
+      const headers = await getAuthHeaders()
       
-      return result
-    } catch (error) {
-      console.error('Failed to process story action:', error)
-      throw new Error(error instanceof Error ? error.message : 'Failed to process story action')
-    }
-  }
-
-  /**
-   * Get session information
-   */
-  static async getSessionInfo(sessionId: string) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/story/session/${sessionId}`)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
-      }
-
-      return await response.json()
-    } catch (error) {
-      console.error('Failed to get session info:', error)
-      throw new Error(error instanceof Error ? error.message : 'Failed to get session info')
-    }
-  }
-
-  /**
-   * Delete a story session
-   */
-  static async deleteSession(sessionId: string) {
-    try {
       const response = await fetch(`${API_BASE_URL}/api/story/session/${sessionId}`, {
-        method: 'DELETE'
+        method: 'GET',
+        headers
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to get session history')
       }
 
       return await response.json()
     } catch (error) {
-      console.error('Failed to delete session:', error)
-      throw new Error(error instanceof Error ? error.message : 'Failed to delete session')
+      console.error('AdventureService.getSessionHistory error:', error)
+      throw error
+    }
+  }
+
+  static async getUserSessions(): Promise<SessionsResponse> {
+    try {
+      const headers = await getAuthHeaders()
+      
+      const response = await fetch(`${API_BASE_URL}/api/story/sessions`, {
+        method: 'GET',
+        headers
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to get user sessions')
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('AdventureService.getUserSessions error:', error)
+      throw error
+    }
+  }
+
+  static async deleteSession(sessionId: string): Promise<{ message: string }> {
+    try {
+      const headers = await getAuthHeaders()
+      
+      const response = await fetch(`${API_BASE_URL}/api/story/session/${sessionId}`, {
+        method: 'DELETE',
+        headers
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to delete session')
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('AdventureService.deleteSession error:', error)
+      throw error
     }
   }
 }
