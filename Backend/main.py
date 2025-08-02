@@ -11,23 +11,26 @@ from supabase import create_client, Client
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import re
 
+# Import our new RAG components
+from chroma_connection import get_memory_manager, MemoryManager
+from story_generator import StoryGenerator
+
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI
+# Initialize OpenAI (keeping for compatibility)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Initialize Supabase with service role key for admin operations
 supabase_url = os.getenv("SUPABASE_URL")
-supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # Service role for admin operations
-supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")  # For client-side operations
+supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
 
 if not all([supabase_url, supabase_service_key, supabase_anon_key]):
     raise ValueError("Missing Supabase environment variables")
 
-# Initialize Supabase clients with minimal options to avoid proxy error
+# Initialize Supabase clients
 try:
-    # Service role client for admin operations (inserting/fetching all data)
     supabase_admin: Client = create_client(
         supabase_url, 
         supabase_service_key,
@@ -37,7 +40,6 @@ try:
             "persist_session": True
         }
     )
-    # Anon client for user-specific operations
     supabase_client: Client = create_client(
         supabase_url, 
         supabase_anon_key,
@@ -49,16 +51,15 @@ try:
     )
 except Exception as e:
     print(f"Error initializing Supabase clients: {e}")
-    # Fallback to basic initialization
     supabase_admin: Client = create_client(supabase_url, supabase_service_key)
     supabase_client: Client = create_client(supabase_url, supabase_anon_key)
 
-app = FastAPI(title="Interactive Story Generator API", version="2.0.0")
+app = FastAPI(title="Interactive Story Generator API with RAG", version="3.0.0")
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this properly for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,7 +68,7 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
-# Pydantic models
+# Pydantic models (keeping existing ones)
 class StoryInitRequest(BaseModel):
     genre: str
     character: str
@@ -104,10 +105,25 @@ class ChatHistoryResponse(BaseModel):
     messages: List[ChatMessage]
     success: bool
 
-# Authentication helper function
+# New models for RAG features
+class StorySummaryResponse(BaseModel):
+    session_id: str
+    summary: str
+    success: bool
+
+class MemorySearchRequest(BaseModel):
+    session_id: str
+    query: str
+    limit: Optional[int] = 5
+
+class MemorySearchResponse(BaseModel):
+    session_id: str
+    memories: List[Dict[str, str]]
+    success: bool
+
+# Authentication helper function (unchanged)
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        # Verify the JWT token with Supabase
         token = credentials.credentials
         response = supabase_client.auth.get_user(token)
         
@@ -119,7 +135,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         print(f"Authentication error: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# Database helper functions
+# Database helper functions (keeping existing ones)
 async def save_chat_to_db(user_id: str, session_id: str, title: str, system_prompt: str):
     """Save a new chat session to database"""
     try:
@@ -157,15 +173,12 @@ async def save_message_to_db(chat_id: str, user_id: str, role: str, content: str
 async def get_chat_history(chat_id: str, user_id: str):
     """Get full chat history from database with proper ordering"""
     try:
-        # Get chat info first
         chat_result = supabase_admin.table("chats").select("*").eq("id", chat_id).eq("user_id", user_id).execute()
         if not chat_result.data:
             return None
         
         chat_info = chat_result.data[0]
         
-        # Get messages ordered by timestamp ASC (chronological order) with id as tiebreaker
-        # This ensures proper conversation flow from start to finish
         messages_result = supabase_admin.table("chat_messages").select("*").eq("chat_id", chat_id).eq("user_id", user_id).order("timestamp", desc=False).order("id", desc=False).execute()
         
         messages = []
@@ -190,18 +203,15 @@ async def get_chat_history(chat_id: str, user_id: str):
 async def get_user_chats(user_id: str):
     """Get all chats for a user with proper ordering and last message preview"""
     try:
-        # Get chats ordered by last_updated (most recent first)
         chats_result = supabase_admin.table("chats").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
         
         chats_with_preview = []
         for chat in chats_result.data:
-            # Get the last message for preview
             last_message_result = supabase_admin.table("chat_messages").select("content, timestamp").eq("chat_id", chat["id"]).order("timestamp", desc=True).limit(1).execute()
             
             last_message_preview = ""
             if last_message_result.data:
                 content = last_message_result.data[0]["content"]
-                # Extract preview (first 80 chars, avoiding title)
                 lines = content.split('\n')
                 preview_text = ' '.join(lines).replace('**', '').strip()
                 last_message_preview = preview_text[:80] + '...' if len(preview_text) > 80 else preview_text
@@ -238,32 +248,30 @@ async def check_chat_ownership(chat_id: str, user_id: str):
 async def delete_chat(chat_id: str):
     """Delete a chat and its messages"""
     try:
-        # Delete messages first (due to foreign key constraint)
         supabase_admin.table("chat_messages").delete().eq("chat_id", chat_id).execute()
-        
-        # Delete chat
         result = supabase_admin.table("chats").delete().eq("id", chat_id).execute()
         return True
     except Exception as e:
         print(f"Error deleting chat: {e}")
         return False
 
-# Story generation functions
+# Story generation functions - Enhanced with RAG
 def create_system_message(genre, character, world_additions, actions):
     """Create the system message for the game master"""
-    return f"""You are a creative, immersive, and adaptive text-based game master. You generate dynamic adventures for the player, complete with rich world-building, characters, challenges, and story progression. 
+    return f"""You are a creative, immersive, and adaptive text-based game master with infinite memory. You generate dynamic adventures for the player, complete with rich world-building, characters, challenges, and story progression. 
 
 Key instructions:
 - Always stay in-character and respond as if the player is inside the game world
 - Never reveal you are an AI
-- Start the game with an engaging scenario based on the selected genre and assign a character role to the player. 
-- Wait for the player's action after describing the scene. 
-- Roleplay according to the world rules and the type of world. 
-- Make sure a Title is given to each story, with the world, kingdoms, factions and any other character lore or story related role laid out in detailed.
+- Start the game with an engaging scenario and assign a character role to the player
+- Wait for the player's action after describing each scene
+- Roleplay according to the world rules and maintain consistency
+- Remember ALL previous events, characters, and world state changes
+- Reference past events naturally when they become relevant
+- Make sure a Title is given to each story, with detailed world lore
 - Make the story engaging and interactive
 - Respond to player actions with consequences and new developments
 - Keep the narrative flowing and building upon previous events
-- Create a detailed title and world lore at the start
 
 Story Parameters:
 - Genre: {genre}
@@ -273,62 +281,35 @@ Story Parameters:
 
 Start with an engaging scenario, provide rich world-building details, and wait for the player's action after describing each scene."""
 
-def generate_initial_story(messages):
-    """Generate the initial story setup"""
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            max_tokens=1200,
-            temperature=1.0
-        )
-        return completion.choices[0].message.content
-    except Exception as e:
-        return f"Error generating story: {str(e)}"
-
-def continue_story(messages):
-    """Continue the story based on user input"""
-    try:
-        # Limit conversation history to prevent token overflow
-        # Keep system message + last 10 exchanges (20 messages)
-        if len(messages) > 21:
-            messages = [messages[0]] + messages[-20:]
-        
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            max_tokens=800,
-            temperature=1.0
-        )
-        return completion.choices[0].message.content
-    except Exception as e:
-        return f"Error continuing story: {str(e)}"
-
 def extract_title_from_story(story_content: str) -> str:
     """Extract title from story content"""
-    # Look for **Title: something** pattern
     title_match = re.search(r'\*\*Title:\s*([^*]+)\*\*', story_content, re.IGNORECASE)
     if title_match:
         return title_match.group(1).strip()
     
-    # Look for any text between ** at the beginning
     bold_match = re.search(r'^\*\*([^*]+)\*\*', story_content)
     if bold_match:
         return bold_match.group(1).strip()
     
-    # Fallback: take first line and limit length
     first_line = story_content.split('\n')[0].replace('**', '').strip()
     return first_line[:50] + '...' if len(first_line) > 50 else first_line
 
+# Create dependency for StoryGenerator
+def get_story_generator(memory_manager: MemoryManager = Depends(get_memory_manager)) -> StoryGenerator:
+    """Dependency injection for StoryGenerator"""
+    return StoryGenerator(memory_manager)
+
 # API Endpoints
 @app.post("/api/story/init", response_model=StoryResponse)
-async def initialize_story(request: StoryInitRequest, user_id: str = Depends(get_current_user)):
-    """Initialize a new story session"""
+async def initialize_story(
+    request: StoryInitRequest, 
+    user_id: str = Depends(get_current_user),
+    story_gen: StoryGenerator = Depends(get_story_generator)
+):
+    """Initialize a new story session with RAG"""
     try:
-        # Generate unique session ID
         session_id = str(uuid.uuid4())
         
-        # Create system message with user preferences
         system_message = create_system_message(
             request.genre, 
             request.character, 
@@ -336,14 +317,15 @@ async def initialize_story(request: StoryInitRequest, user_id: str = Depends(get
             request.actions
         )
         
-        # Initialize conversation with system message
-        messages = [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": "Generate a random story and world for me."}
-        ]
-        
-        # Generate initial story
-        initial_response = generate_initial_story(messages)
+        # Generate initial story using RAG-enhanced generator
+        initial_response = await story_gen.generate_initial_story(
+            genre=request.genre,
+            character=request.character,
+            world_additions=request.world_additions,
+            actions=request.actions,
+            user_id=user_id,
+            chat_id=session_id
+        )
         
         # Check for error in response
         if initial_response.startswith("Error generating story:"):
@@ -365,7 +347,7 @@ async def initialize_story(request: StoryInitRequest, user_id: str = Depends(get
             session_id=session_id,
             story_content=initial_response,
             success=True,
-            message="Story initialized successfully"
+            message="Story initialized successfully with RAG memory"
         )
         
     except HTTPException:
@@ -374,8 +356,12 @@ async def initialize_story(request: StoryInitRequest, user_id: str = Depends(get
         raise HTTPException(status_code=500, detail=f"Failed to initialize story: {str(e)}")
 
 @app.post("/api/story/action", response_model=StoryResponse)
-async def take_story_action(request: StoryActionRequest, user_id: str = Depends(get_current_user)):
-    """Continue the story with a user action"""
+async def take_story_action(
+    request: StoryActionRequest, 
+    user_id: str = Depends(get_current_user),
+    story_gen: StoryGenerator = Depends(get_story_generator)
+):
+    """Continue the story with a user action using RAG"""
     try:
         # Get chat history from database
         chat_data = await get_chat_history(request.session_id, user_id)
@@ -385,18 +371,19 @@ async def take_story_action(request: StoryActionRequest, user_id: str = Depends(
         chat_info = chat_data["chat_info"]
         db_messages = chat_data["messages"]
         
-        # Rebuild messages array for OpenAI
-        messages = [{"role": "system", "content": chat_info["system_prompt"]}]
+        # Convert database messages to the format expected by story generator
+        recent_messages = [
+            {"role": msg["role"], "content": msg["content"]} 
+            for msg in db_messages
+        ]
         
-        # Add all previous messages
-        for msg in db_messages:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-        
-        # Add new user action
-        messages.append({"role": "user", "content": request.user_action})
-        
-        # Generate response
-        response = continue_story(messages)
+        # Generate response using RAG-enhanced story generator
+        response = await story_gen.continue_story(
+            user_action=request.user_action,
+            user_id=user_id,
+            chat_id=request.session_id,
+            recent_messages=recent_messages
+        )
         
         # Check for error in response
         if response.startswith("Error continuing story:"):
@@ -410,7 +397,7 @@ async def take_story_action(request: StoryActionRequest, user_id: str = Depends(
             session_id=request.session_id,
             story_content=response,
             success=True,
-            message="Action processed successfully"
+            message="Action processed successfully with RAG memory"
         )
         
     except HTTPException:
@@ -418,6 +405,77 @@ async def take_story_action(request: StoryActionRequest, user_id: str = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process action: {str(e)}")
 
+# New RAG-specific endpoints
+@app.get("/api/story/summary/{session_id}", response_model=StorySummaryResponse)
+async def get_story_summary(
+    session_id: str, 
+    user_id: str = Depends(get_current_user),
+    story_gen: StoryGenerator = Depends(get_story_generator)
+):
+    """Get an AI-generated summary of the story so far"""
+    try:
+        # Check if session exists and belongs to user
+        chat_exists = await check_chat_ownership(session_id, user_id)
+        if not chat_exists:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Generate summary using RAG
+        summary = await story_gen.get_story_summary(user_id, session_id)
+        
+        return StorySummaryResponse(
+            session_id=session_id,
+            summary=summary,
+            success=True
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
+
+@app.post("/api/story/search-memories", response_model=MemorySearchResponse)
+async def search_memories(
+    request: MemorySearchRequest,
+    user_id: str = Depends(get_current_user),
+    memory_manager: MemoryManager = Depends(get_memory_manager)
+):
+    """Search through story memories using semantic search"""
+    try:
+        # Check if session exists and belongs to user
+        chat_exists = await check_chat_ownership(request.session_id, user_id)
+        if not chat_exists:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Search memories
+        memories = await memory_manager.retrieve_memories(
+            query=request.query,
+            user_id=user_id,
+            chat_id=request.session_id,
+            k=request.limit
+        )
+        
+        # Format response
+        formatted_memories = []
+        for memory in memories:
+            formatted_memories.append({
+                "content": memory.page_content,
+                "role": memory.metadata.get("role", "unknown"),
+                "memory_type": memory.metadata.get("memory_type", "general"),
+                "timestamp": memory.metadata.get("timestamp", "unknown")
+            })
+        
+        return MemorySearchResponse(
+            session_id=request.session_id,
+            memories=formatted_memories,
+            success=True
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to search memories: {str(e)}")
+
+# Keep existing endpoints unchanged
 @app.get("/api/story/session/{session_id}", response_model=ChatHistoryResponse)
 async def get_session_history(session_id: str, user_id: str = Depends(get_current_user)):
     """Get full chat history for a session"""
@@ -448,7 +506,6 @@ async def list_sessions(user_id: str = Depends(get_current_user)):
     try:
         chats = await get_user_chats(user_id)
         
-        # Get message count for each chat and format response
         sessions = []
         for chat in chats:
             message_count = await get_message_count(chat["id"])
@@ -474,38 +531,82 @@ async def list_sessions(user_id: str = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
 
 @app.delete("/api/story/session/{session_id}")
-async def delete_session(session_id: str, user_id: str = Depends(get_current_user)):
-    """Delete a story session"""
+async def delete_session(
+    session_id: str, 
+    user_id: str = Depends(get_current_user),
+    story_gen: StoryGenerator = Depends(get_story_generator)
+):
+    """Delete a story session and its memories"""
     try:
         # Check if session exists and belongs to user
         chat_exists = await check_chat_ownership(session_id, user_id)
         if not chat_exists:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Delete the session (messages will be deleted automatically due to CASCADE)
+        # Delete memories from ChromaDB
+        memory_cleanup_success = await story_gen.cleanup_chat_memories(session_id)
+        if not memory_cleanup_success:
+            print(f"Warning: Failed to cleanup memories for chat {session_id}")
+        
+        # Delete the session from Supabase
         success = await delete_chat(session_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete session")
         
-        return {"message": "Session deleted successfully"}
+        return {"message": "Session and memories deleted successfully"}
         
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")
 
+# Health check endpoint for ChromaDB
+@app.get("/api/health/memory")
+async def check_memory_health(memory_manager: MemoryManager = Depends(get_memory_manager)):
+    """Health check for memory system"""
+    try:
+        # Try to perform a simple operation
+        test_memories = await memory_manager.retrieve_memories(
+            query="test",
+            user_id="health-check",
+            chat_id="health-check",
+            k=1
+        )
+        
+        return {
+            "status": "healthy",
+            "memory_system": "connected",
+            "message": "RAG memory system is operational"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "memory_system": "error",
+            "message": f"Memory system error: {str(e)}"
+        }
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
-        "message": "Interactive Story Generator API with Supabase", 
-        "version": "2.0.0",
+        "message": "Interactive Story Generator API with RAG Memory", 
+        "version": "3.0.0",
+        "features": [
+            "Semantic memory search",
+            "Contextual story generation",
+            "Persistent character and world memory",
+            "Story summaries",
+            "Enhanced continuity"
+        ],
         "endpoints": {
             "init_story": "/api/story/init",
             "take_action": "/api/story/action",
             "get_session": "/api/story/session/{session_id}",
+            "get_summary": "/api/story/summary/{session_id}",
+            "search_memories": "/api/story/search-memories",
             "list_sessions": "/api/story/sessions",
             "delete_session": "/api/story/session/{session_id}",
+            "memory_health": "/api/health/memory",
             "docs": "/docs"
         }
     }
