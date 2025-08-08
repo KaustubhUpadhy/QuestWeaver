@@ -602,7 +602,7 @@ const Adventures = () => {
                       <div className="flex gap-4">
                         <Avatar className="h-8 w-8 flex-shrink-0 mt-1 ring-2 ring-primary/20">
                           <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-                            AI
+                            Dungeon Master
                           </AvatarFallback>
                         </Avatar>
                         <div className="bg-card/80 backdrop-blur-sm p-6 rounded-2xl flex-1 border border-border/30 shadow-sm">
@@ -610,7 +610,7 @@ const Adventures = () => {
                             <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
                             <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                             <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                            <span className="text-sm">AI is thinking...</span>
+                            <span className="text-sm">Dungeon Master is thinking...</span>
                           </div>
                         </div>
                       </div>
