@@ -25,7 +25,7 @@ _vectorstore: Chroma | None = None
 _embeddings: OpenAIEmbeddings | None = None
 
 def get_chroma_client() -> ClientAPI:
-    """Get or create ChromaDB client - CLOUD ONLY with correct API usage"""
+    """Get or create ChromaDB client - Using HttpClient as shown in dashboard"""
     global _client
     if _client is None:
         # Require cloud credentials
@@ -44,12 +44,15 @@ def get_chroma_client() -> ClientAPI:
         try:
             logger.info(f"Connecting to Chroma Cloud with tenant: {chroma_tenant}")
             
-            # FIXED: Use the correct ChromaDB CloudClient initialization
-            # Don't pass api_key in settings, pass it directly to CloudClient
-            _client = chromadb.CloudClient(
+            # FIXED: Use HttpClient as shown in ChromaDB dashboard
+            _client = chromadb.HttpClient(
+                ssl=True,
+                host='api.trychroma.com',
                 tenant=chroma_tenant,
                 database=chroma_database,
-                api_key=chroma_api_key  # Pass API key directly here
+                headers={
+                    'X-Chroma-Token': chroma_api_key
+                }
             )
             
             # Test the connection by trying to list collections
@@ -62,16 +65,7 @@ def get_chroma_client() -> ClientAPI:
             logger.error(f"API Key present: {bool(chroma_api_key)}")
             logger.error(f"Tenant: {chroma_tenant}")
             logger.error(f"Database: {chroma_database}")
-            
-            # Check if it's a tenant issue and provide helpful error
-            if "tenant" in str(e).lower() or "does not exist" in str(e).lower():
-                raise Exception(f"ChromaDB tenant '{chroma_tenant}' not found. Please verify your tenant ID in the ChromaDB dashboard.")
-            elif "api" in str(e).lower() and "deprecated" in str(e).lower():
-                raise Exception("ChromaDB API version issue. Please check if your ChromaDB plan is active and tenant exists.")
-            elif "validation error" in str(e).lower():
-                raise Exception(f"ChromaDB configuration error. Please check your API key and tenant settings.")
-            else:
-                raise Exception(f"ChromaDB Cloud connection failed: {e}")
+            raise Exception(f"ChromaDB Cloud connection failed: {e}")
     
     return _client
 
