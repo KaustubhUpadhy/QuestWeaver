@@ -4,13 +4,12 @@ from chromadb.api.models.Collection import Collection
 from fastapi import Depends
 from dotenv import load_dotenv
 import os
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_chroma import Chroma
-
+from langchain_openai import OpenAIEmbeddings
 from langchain.schema import Document
 from typing import List, Dict, Any, Optional
 import logging
 import time
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -21,14 +20,12 @@ load_dotenv()
 # Global clients
 _client: ClientAPI | None = None
 _collection: Collection | None = None
-_vectorstore: Chroma | None = None
 _embeddings: OpenAIEmbeddings | None = None
 
 def get_chroma_client() -> ClientAPI:
-    """Get or create ChromaDB client - Updated for v2 API"""
+    """Get or create ChromaDB client - Direct ChromaDB 1.0.16 connection"""
     global _client
     if _client is None:
-        # Require cloud credentials
         chroma_api_key = os.getenv("CHROMA_API_KEY")
         chroma_tenant = os.getenv("CHROMA_TENANT") 
         chroma_database = os.getenv("CHROMA_DATABASE")
@@ -44,18 +41,18 @@ def get_chroma_client() -> ClientAPI:
         try:
             logger.info(f"Connecting to Chroma Cloud with tenant: {chroma_tenant}")
             
-            # Use the EXACT format from ChromaDB dashboard
+            # Use exact format from ChromaDB dashboard
             _client = chromadb.HttpClient(
                 ssl=True,
                 host='api.trychroma.com',
                 tenant=chroma_tenant,
                 database=chroma_database,
                 headers={
-                    'x-chroma-token': chroma_api_key  # Note: lowercase 'x-chroma-token'
+                    'x-chroma-token': chroma_api_key
                 }
             )
             
-            # Test the connection by trying to list collections
+            # Test the connection
             collections = _client.list_collections()
             logger.info(f"✅ Successfully connected to Chroma Cloud! Found {len(collections)} collections")
             return _client
@@ -65,7 +62,6 @@ def get_chroma_client() -> ClientAPI:
             logger.error(f"API Key present: {bool(chroma_api_key)}")
             logger.error(f"Tenant: {chroma_tenant}")
             logger.error(f"Database: {chroma_database}")
-            
             raise Exception(f"ChromaDB Cloud connection failed: {e}")
     
     return _client
@@ -100,32 +96,12 @@ def get_embeddings() -> OpenAIEmbeddings:
         logger.info("✅ Initialized OpenAI embeddings (text-embedding-ada-002)")
     return _embeddings
 
-def get_vectorstore(
-    client: ClientAPI = Depends(get_chroma_client),
-    embeddings: OpenAIEmbeddings = Depends(get_embeddings)
-) -> Chroma:
-    """Get LangChain Chroma vectorstore instance with OpenAI embeddings"""
-    global _vectorstore
-    if _vectorstore is None:
-        try:
-            _vectorstore = Chroma(
-                client=client,
-                collection_name="quest_memories",
-                embedding_function=embeddings
-            )
-            logger.info("✅ Initialized LangChain Chroma vectorstore with OpenAI embeddings")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize vectorstore: {e}")
-            raise Exception(f"Failed to initialize vectorstore: {e}")
-    return _vectorstore
-
-# Rest of your MemoryManager class remains the same...
-class MemoryManager:
-    """Manages story memories with semantic search capabilities"""
+class DirectChromaMemoryManager:
+    """Direct ChromaDB integration without LangChain-Chroma"""
     
-    def __init__(self, vectorstore: Chroma, collection: Collection):
-        self.vectorstore = vectorstore
+    def __init__(self, collection: Collection, embeddings: OpenAIEmbeddings):
         self.collection = collection
+        self.embeddings = embeddings
     
     async def store_memory(
         self, 
@@ -151,9 +127,13 @@ class MemoryManager:
             # Generate unique ID
             memory_id = f"{chat_id}_{role}_{int(time.time())}"
             
-            # Store in vectorstore (LangChain will handle embeddings)
-            self.vectorstore.add_texts(
-                texts=[content],
+            # Generate embeddings using OpenAI
+            embedding = self.embeddings.embed_query(content)
+            
+            # Store directly in ChromaDB
+            self.collection.add(
+                documents=[content],
+                embeddings=[embedding],
                 metadatas=[metadata],
                 ids=[memory_id]
             )
@@ -176,38 +156,40 @@ class MemoryManager:
     ) -> List[Document]:
         """Retrieve relevant memories with filtering"""
         try:
-            # Get ALL memories without any where filter first (to avoid ChromaDB bugs)
-            docs = self.vectorstore.similarity_search(
-                query=query,
-                k=k * 10  # Get many more to filter manually
+            # Generate query embedding
+            query_embedding = self.embeddings.embed_query(query)
+            
+            # Build where clause for filtering
+            where_clause = {
+                "$and": [
+                    {"user_id": {"$eq": user_id}},
+                    {"chat_id": {"$eq": chat_id}}
+                ]
+            }
+            
+            if memory_types:
+                where_clause["$and"].append({"memory_type": {"$in": memory_types}})
+            
+            if include_roles:
+                where_clause["$and"].append({"role": {"$in": include_roles}})
+            
+            # Query ChromaDB directly
+            results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=k,
+                where=where_clause,
+                include=["documents", "metadatas", "distances"]
             )
             
-            # Manually filter the results
-            filtered_docs = []
-            for doc in docs:
-                metadata = doc.metadata
-                
-                # Must match user_id and chat_id
-                if (metadata.get("user_id") != user_id or 
-                    metadata.get("chat_id") != chat_id):
-                    continue
-                
-                # Filter by memory types if specified
-                if memory_types and metadata.get("memory_type") not in memory_types:
-                    continue
-                    
-                # Filter by roles if specified
-                if include_roles and metadata.get("role") not in include_roles:
-                    continue
-                    
-                filtered_docs.append(doc)
-                
-                # Stop when we have enough
-                if len(filtered_docs) >= k:
-                    break
+            # Convert to LangChain Documents
+            documents = []
+            if results['documents'] and results['documents'][0]:
+                for i, doc in enumerate(results['documents'][0]):
+                    metadata = results['metadatas'][0][i] if results['metadatas'] else {}
+                    documents.append(Document(page_content=doc, metadata=metadata))
             
-            logger.info(f"✅ Retrieved {len(filtered_docs)} memories for query: {query[:50]}...")
-            return filtered_docs
+            logger.info(f"✅ Retrieved {len(documents)} memories for query: {query[:50]}...")
+            return documents
             
         except Exception as e:
             logger.error(f"❌ Failed to retrieve memories: {e}")
@@ -221,24 +203,33 @@ class MemoryManager:
     ) -> List[Document]:
         """Get most recent memories from a chat"""
         try:
-            # Use simple similarity search to avoid where clause issues
-            docs = self.vectorstore.similarity_search(
-                query="recent conversation",
-                k=limit * 3  # Get more to filter manually
+            # Get recent memories by timestamp
+            where_clause = {
+                "$and": [
+                    {"user_id": {"$eq": user_id}},
+                    {"chat_id": {"$eq": chat_id}}
+                ]
+            }
+            
+            # Get more than needed to sort by timestamp
+            results = self.collection.get(
+                where=where_clause,
+                limit=limit * 2,
+                include=["documents", "metadatas"]
             )
             
-            # Filter manually
-            filtered_docs = []
-            for doc in docs:
-                metadata = doc.metadata
-                if (metadata.get("user_id") == user_id and 
-                    metadata.get("chat_id") == chat_id):
-                    filtered_docs.append(doc)
-                if len(filtered_docs) >= limit:
-                    break
+            # Convert and sort by timestamp
+            documents = []
+            if results['documents']:
+                doc_data = list(zip(results['documents'], results['metadatas']))
+                # Sort by timestamp (most recent first)
+                doc_data.sort(key=lambda x: int(x[1].get('timestamp', 0)), reverse=True)
+                
+                for doc, metadata in doc_data[:limit]:
+                    documents.append(Document(page_content=doc, metadata=metadata))
             
-            logger.info(f"✅ Retrieved {len(filtered_docs)} recent memories for chat {chat_id}")
-            return filtered_docs
+            logger.info(f"✅ Retrieved {len(documents)} recent memories for chat {chat_id}")
+            return documents
             
         except Exception as e:
             logger.error(f"❌ Failed to get recent memories: {e}")
@@ -247,7 +238,6 @@ class MemoryManager:
     async def delete_chat_memories(self, chat_id: str) -> bool:
         """Delete all memories for a specific chat"""
         try:
-            # Simple delete with where clause
             self.collection.delete(
                 where={"chat_id": {"$eq": chat_id}}
             )
@@ -259,8 +249,8 @@ class MemoryManager:
             return False
 
 def get_memory_manager(
-    vectorstore: Chroma = Depends(get_vectorstore),
-    collection: Collection = Depends(get_chroma_collection)
-) -> MemoryManager:
+    collection: Collection = Depends(get_chroma_collection),
+    embeddings: OpenAIEmbeddings = Depends(get_embeddings)
+) -> DirectChromaMemoryManager:
     """Dependency injection for MemoryManager"""
-    return MemoryManager(vectorstore, collection)
+    return DirectChromaMemoryManager(collection, embeddings)
