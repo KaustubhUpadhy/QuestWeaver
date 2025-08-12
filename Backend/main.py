@@ -1001,3 +1001,11 @@ async def root():
             "docs": "/docs"
         }
     }
+@app.get("/health")
+async def health_check():
+    """Lightweight health check for uptime monitoring"""
+    return {
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "uptime": "service_running"
+    }
