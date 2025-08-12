@@ -248,6 +248,8 @@ class DirectChromaMemoryManager:
             logger.error(f"❌ Failed to delete chat memories: {e}")
             return False
 
+MemoryManager = DirectChromaMemoryManager
+
 def get_memory_manager(
     collection: Collection = Depends(get_chroma_collection),
     embeddings: OpenAIEmbeddings = Depends(get_embeddings)
