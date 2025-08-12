@@ -55,10 +55,6 @@ const ProfileDropdown = ({ onDeleteAccount }: ProfileDropdownProps) => {
     onDeleteAccount()
   }
 
-  const getUserInitials = (email: string) => {
-    return email.substring(0, 2).toUpperCase()
-  }
-
   const getUserDisplayName = (email: string) => {
     return email.split('@')[0]
   }
@@ -75,14 +71,7 @@ const ProfileDropdown = ({ onDeleteAccount }: ProfileDropdownProps) => {
         }`}
         onClick={() => setIsOpen(!isOpen)}
       >
-        <Avatar className="h-8 w-8">
-          <AvatarImage src={user.user_metadata?.avatar_url} alt="Profile" />
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-            {getUserInitials(user.email || '')}
-          </AvatarFallback>
-        </Avatar>
-        
-        <span className="text-sm font-medium text-foreground hidden sm:block">
+        <span className="text-sm font-medium text-foreground">
           {getUserDisplayName(user.email || '')}
         </span>
         
@@ -97,12 +86,6 @@ const ProfileDropdown = ({ onDeleteAccount }: ProfileDropdownProps) => {
           {/* User Info Header */}
           <div className="px-4 py-3 border-b border-border">
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={user.user_metadata?.avatar_url} alt="Profile" />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
-                  {getUserInitials(user.email || '')}
-                </AvatarFallback>
-              </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">
                   {getUserDisplayName(user.email || '')}
