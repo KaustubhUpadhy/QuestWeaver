@@ -28,33 +28,30 @@ supabase_url = os.getenv("SUPABASE_URL")
 supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
 
-if not all([supabase_url, supabase_service_key, supabase_anon_key]):
-    raise ValueError("Missing Supabase environment variables")
+# Initialize as None first
+supabase_admin = None
+supabase_client = None
 
-# Initialize Supabase clients
+# Don't crash if Supabase fails
 try:
-    supabase_admin: Client = create_client(
-        supabase_url, 
-        supabase_service_key,
-        options={
-            "schema": "public",
-            "auto_refresh_token": True,
-            "persist_session": True
-        }
-    )
-    supabase_client: Client = create_client(
-        supabase_url, 
-        supabase_anon_key,
-        options={
-            "schema": "public",
-            "auto_refresh_token": True,
-            "persist_session": True
-        }
-    )
+    if all([supabase_url, supabase_service_key, supabase_anon_key]):
+        print(f"🔄 Initializing Supabase with URL: {supabase_url}")
+        
+        # Try simple initialization first
+        supabase_admin = create_client(supabase_url, supabase_service_key)
+        supabase_client = create_client(supabase_url, supabase_anon_key)
+        
+        print("✅ Supabase clients initialized successfully")
+    else:
+        print("⚠️ Missing Supabase environment variables")
+        print(f"URL exists: {bool(supabase_url)}")
+        print(f"Service key exists: {bool(supabase_service_key)}")
+        print(f"Anon key exists: {bool(supabase_anon_key)}")
+        
 except Exception as e:
-    print(f"Error initializing Supabase clients: {e}")
-    supabase_admin: Client = create_client(supabase_url, supabase_service_key)
-    supabase_client: Client = create_client(supabase_url, supabase_anon_key)
+    print(f"⚠️ Supabase initialization failed: {e}")
+    print("🚀 Continuing without Supabase (app will start but features limited)")
+    # Don't raise - let the app start
 
 app = FastAPI(title="Interactive Story Generator API with RAG and Images", version="4.0.0")
 
@@ -143,6 +140,9 @@ class ImageStatusResponse(BaseModel):
 # Authentication helper function (unchanged)
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
+        if not supabase_client:
+            raise HTTPException(status_code=503, detail="Authentication service unavailable")
+            
         token = credentials.credentials
         response = supabase_client.auth.get_user(token)
         
@@ -684,7 +684,6 @@ async def regenerate_images(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to regenerate images: {str(e)}")
-# Add this endpoint to your main.py file
 
 @app.delete("/api/user/delete-account")
 async def delete_user_account(
@@ -825,17 +824,6 @@ async def delete_user_account(
             detail=f"Account deletion failed: {str(e)}"
         )
 
-# Helper function to get user chats (if not already exists)
-async def get_user_chats(user_id: str):
-    """Get all chats for a user"""
-    try:
-        result = supabase_admin.table("chats").select("*").eq("user_id", user_id).execute()
-        return result.data if result.data else []
-    except Exception as e:
-        print(f"Error getting user chats: {e}")
-        return []
-    
-    
 # Keep existing endpoints unchanged
 @app.get("/api/story/session/{session_id}", response_model=ChatHistoryResponse)
 async def get_session_history(session_id: str, user_id: str = Depends(get_current_user)):
@@ -1013,4 +1001,3 @@ async def root():
             "docs": "/docs"
         }
     }
-
