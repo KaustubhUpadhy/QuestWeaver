@@ -6,7 +6,6 @@ import Adventures from '@/pages/Adventures'
 import About from '@/pages/About'
 import NotFound from '@/pages/NotFound'
 import AuthCallback from '@/components/AuthCallback'
-import ThemeSelector from '@/components/ThemeSelector'
 
 function App() {
   return (
@@ -21,7 +20,6 @@ function App() {
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
-            <ThemeSelector />
           </div>
         </BrowserRouter>
       </AuthProvider>
