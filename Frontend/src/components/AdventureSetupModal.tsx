@@ -135,7 +135,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
               <div className="flex items-center space-x-2 mb-2">
                 <Sparkles className="h-5 w-5 text-primary" />
                 <label className="text-lg font-semibold text-foreground">
-                  Genre
+                  Genre (Optional)
                 </label>
               </div>
               <p className="text-sm text-muted-foreground/70 mb-3">
@@ -156,7 +156,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
               <div className="flex items-center space-x-2 mb-2">
                 <User className="h-5 w-5 text-primary" />
                 <label className="text-lg font-semibold text-foreground">
-                  Character
+                  Character (Optional)
                 </label>
               </div>
               <p className="text-sm text-muted-foreground/70 mb-3">
@@ -177,7 +177,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
               <div className="flex items-center space-x-2 mb-2">
                 <Globe className="h-5 w-5 text-primary" />
                 <label className="text-lg font-semibold text-foreground">
-                  World Details
+                  World Details (Optional)
                 </label>
               </div>
               <p className="text-sm text-muted-foreground/70 mb-3">

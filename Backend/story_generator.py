@@ -147,7 +147,8 @@ Generate a random story and world for me. Start with an engaging scenario, provi
 
 Required format:
 **Title: [Your Title]**
-
+**World: [World Building]**
+**Character: [Character Descripption]**
 [Your story content with world-building and character setup...]
 
 What do you do?

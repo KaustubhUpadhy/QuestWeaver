@@ -26,6 +26,12 @@ world_create.py
 *.sln
 *.sw?
 
-
-.venv
+**/.venv/
+*.env
+Backend\.env
+.env.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env

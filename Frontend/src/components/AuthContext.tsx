@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/lib/supabase'
 import type { User, Session, AuthError } from '@supabase/supabase-js'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
 interface AuthContextType {
   user: User | null
   session: Session | null
@@ -12,6 +14,7 @@ interface AuthContextType {
   signInWithProvider: (provider: 'google' | 'github') => Promise<{ error: AuthError | null }>
   signOut: () => Promise<{ error: AuthError | null }>
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>
+  deleteUserAccount: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -129,6 +132,52 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }
 
+  const deleteUserAccount = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error('No authenticated user found')
+      }
+
+      console.log('🗑️ Starting account deletion process for user:', user.id)
+
+      // Step 1: Delete all user data from backend (includes S3, ChromaDB cleanup)
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/user/delete-account`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.detail || 'Failed to delete user data from backend')
+        }
+
+        console.log('✅ Successfully deleted user data from backend')
+      } catch (error) {
+        console.error('❌ Failed to delete backend data:', error)
+        throw new Error('Failed to delete account data. Please contact support.')
+      }
+
+      // Step 2: Sign out and clear local state
+      await supabase.auth.signOut()
+      setUser(null)
+      setSession(null)
+      
+      console.log('✅ Account deletion completed successfully')
+      
+      // Redirect to home page
+      window.location.href = '/'
+      
+    } catch (error) {
+      console.error('🚨 Account deletion failed:', error)
+      throw error
+    }
+  }
+
   const isAuthenticated = !!user
 
   const value = {
@@ -141,7 +190,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signInWithProvider,
     signOut,
     resetPassword,
+    deleteUserAccount,
   }
+  
 
   return (
     <AuthContext.Provider value={value}>
