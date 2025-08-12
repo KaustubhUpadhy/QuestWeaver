@@ -25,43 +25,60 @@ _vectorstore: Chroma | None = None
 _embeddings: OpenAIEmbeddings | None = None
 
 def get_chroma_client() -> ClientAPI:
-    """Get or create ChromaDB client - PRIORITIZE CLOUD CONNECTION"""
+    """Get or create ChromaDB client - CLOUD ONLY with proper configuration"""
     global _client
     if _client is None:
-        # Always try cloud first with your credentials
+        # Require cloud credentials
         chroma_api_key = os.getenv("CHROMA_API_KEY")
         chroma_tenant = os.getenv("CHROMA_TENANT") 
         chroma_database = os.getenv("CHROMA_DATABASE")
         
-        if chroma_api_key and chroma_tenant and chroma_database:
-            try:
-                logger.info(f"Attempting to connect to Chroma Cloud with tenant: {chroma_tenant}")
-                _client = chromadb.CloudClient(
-                    api_key=chroma_api_key,
-                    tenant=chroma_tenant,
-                    database=chroma_database
-                )
-                
-                # Test the connection by trying to list collections
-                collections = _client.list_collections()
-                logger.info(f"✅ Successfully connected to Chroma Cloud! Found {len(collections)} collections")
-                return _client
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to connect to Chroma Cloud: {e}")
-                logger.error(f"API Key present: {bool(chroma_api_key)}")
-                logger.error(f"Tenant: {chroma_tenant}")
-                logger.error(f"Database: {chroma_database}")
-                
-                # Don't fall back to local - let's fix the cloud connection
-                raise Exception(f"ChromaDB Cloud connection failed: {e}")
-        else:
+        if not all([chroma_api_key, chroma_tenant, chroma_database]):
             missing = []
             if not chroma_api_key: missing.append("CHROMA_API_KEY")
             if not chroma_tenant: missing.append("CHROMA_TENANT") 
             if not chroma_database: missing.append("CHROMA_DATABASE")
             
             raise Exception(f"Missing ChromaDB Cloud credentials: {', '.join(missing)}")
+        
+        try:
+            logger.info(f"Connecting to Chroma Cloud with tenant: {chroma_tenant}")
+            
+            # FIXED: Use proper ChromaDB Cloud client with correct settings
+            settings = chromadb.config.Settings(
+                chroma_api_impl="chromadb.api.fastapi.FastAPI",
+                chroma_server_host="api.trychroma.com",
+                chroma_server_http_port=443,
+                chroma_server_ssl_enabled=True,
+                chroma_server_grpc_port=None,
+                chroma_api_key=chroma_api_key,
+                anonymized_telemetry=False
+            )
+            
+            _client = chromadb.CloudClient(
+                tenant=chroma_tenant,
+                database=chroma_database,
+                settings=settings
+            )
+            
+            # Test the connection by trying to list collections
+            collections = _client.list_collections()
+            logger.info(f"✅ Successfully connected to Chroma Cloud! Found {len(collections)} collections")
+            return _client
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to connect to Chroma Cloud: {e}")
+            logger.error(f"API Key present: {bool(chroma_api_key)}")
+            logger.error(f"Tenant: {chroma_tenant}")
+            logger.error(f"Database: {chroma_database}")
+            
+            # Check if it's a tenant issue and provide helpful error
+            if "tenant" in str(e).lower() or "does not exist" in str(e).lower():
+                raise Exception(f"ChromaDB tenant '{chroma_tenant}' not found. Please verify your tenant ID in the ChromaDB dashboard.")
+            elif "api" in str(e).lower() and "deprecated" in str(e).lower():
+                raise Exception("ChromaDB API version issue. Please check if your ChromaDB plan is active and tenant exists.")
+            else:
+                raise Exception(f"ChromaDB Cloud connection failed: {e}")
     
     return _client
 
@@ -69,22 +86,30 @@ def get_chroma_collection(client: ClientAPI = Depends(get_chroma_client)) -> Col
     """Get or create ChromaDB collection for quest memories"""
     global _collection
     if _collection is None:
-        _collection = client.get_or_create_collection(
-            name="quest_memories",
-            metadata={"description": "Story memories and world events for DungeonCraft AI"}
-        )
-        logger.info("Connected to quest_memories collection")
+        try:
+            _collection = client.get_or_create_collection(
+                name="quest_memories",
+                metadata={"description": "Story memories and world events for QuestWeaver AI"}
+            )
+            logger.info("✅ Connected to quest_memories collection")
+        except Exception as e:
+            logger.error(f"❌ Failed to get/create collection: {e}")
+            raise Exception(f"Failed to initialize ChromaDB collection: {e}")
     return _collection
 
 def get_embeddings() -> OpenAIEmbeddings:
-    """Get OpenAI embeddings instance (no sentence-transformers needed)"""
+    """Get OpenAI embeddings instance"""
     global _embeddings
     if _embeddings is None:
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise Exception("OPENAI_API_KEY environment variable is required")
+            
         _embeddings = OpenAIEmbeddings(
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            model="text-embedding-ada-002"  # Reliable OpenAI embedding model
+            openai_api_key=openai_api_key,
+            model="text-embedding-ada-002"
         )
-        logger.info("Initialized OpenAI embeddings (text-embedding-ada-002)")
+        logger.info("✅ Initialized OpenAI embeddings (text-embedding-ada-002)")
     return _embeddings
 
 def get_vectorstore(
@@ -94,12 +119,16 @@ def get_vectorstore(
     """Get LangChain Chroma vectorstore instance with OpenAI embeddings"""
     global _vectorstore
     if _vectorstore is None:
-        _vectorstore = Chroma(
-            client=client,
-            collection_name="quest_memories",
-            embedding_function=embeddings
-        )
-        logger.info("Initialized LangChain Chroma vectorstore with OpenAI embeddings")
+        try:
+            _vectorstore = Chroma(
+                client=client,
+                collection_name="quest_memories",
+                embedding_function=embeddings
+            )
+            logger.info("✅ Initialized LangChain Chroma vectorstore with OpenAI embeddings")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize vectorstore: {e}")
+            raise Exception(f"Failed to initialize vectorstore: {e}")
     return _vectorstore
 
 class MemoryManager:
@@ -140,12 +169,12 @@ class MemoryManager:
                 ids=[memory_id]
             )
             
-            logger.info(f"Stored memory {memory_id} for user {user_id}")
+            logger.info(f"✅ Stored memory {memory_id} for user {user_id}")
             return memory_id
             
         except Exception as e:
-            logger.error(f"Failed to store memory: {e}")
-            raise
+            logger.error(f"❌ Failed to store memory: {e}")
+            raise Exception(f"Failed to store memory: {e}")
     
     async def retrieve_memories(
         self,
@@ -156,9 +185,9 @@ class MemoryManager:
         memory_types: Optional[List[str]] = None,
         include_roles: Optional[List[str]] = None
     ) -> List[Document]:
-        """Retrieve relevant memories with filtering - COMPLETELY FIXED"""
+        """Retrieve relevant memories with filtering"""
         try:
-            # Get ALL memories without any where filter first (to avoid the ChromaDB bug)
+            # Get ALL memories without any where filter first (to avoid ChromaDB bugs)
             docs = self.vectorstore.similarity_search(
                 query=query,
                 k=k * 10  # Get many more to filter manually
@@ -188,11 +217,11 @@ class MemoryManager:
                 if len(filtered_docs) >= k:
                     break
             
-            logger.info(f"Retrieved {len(filtered_docs)} memories for query: {query[:50]}...")
+            logger.info(f"✅ Retrieved {len(filtered_docs)} memories for query: {query[:50]}...")
             return filtered_docs
             
         except Exception as e:
-            logger.error(f"Failed to retrieve memories: {e}")
+            logger.error(f"❌ Failed to retrieve memories: {e}")
             return []
     
     async def get_recent_memories(
@@ -201,16 +230,15 @@ class MemoryManager:
         chat_id: str,
         limit: int = 10
     ) -> List[Document]:
-        """Get most recent memories from a chat - FIXED embedding dimension issue"""
+        """Get most recent memories from a chat"""
         try:
-            # Use LangChain vectorstore for consistency (same embedding model)
-            # But avoid the where clause entirely since it's problematic
+            # Use simple similarity search to avoid where clause issues
             docs = self.vectorstore.similarity_search(
                 query="recent conversation",
                 k=limit * 3  # Get more to filter manually
             )
             
-            # Filter manually to avoid ChromaDB where clause issues
+            # Filter manually
             filtered_docs = []
             for doc in docs:
                 metadata = doc.metadata
@@ -220,70 +248,26 @@ class MemoryManager:
                 if len(filtered_docs) >= limit:
                     break
             
-            logger.info(f"Retrieved {len(filtered_docs)} recent memories for chat {chat_id}")
+            logger.info(f"✅ Retrieved {len(filtered_docs)} recent memories for chat {chat_id}")
             return filtered_docs
             
         except Exception as e:
-            logger.error(f"Failed to get recent memories via vectorstore: {e}")
-            # Final fallback: get all from collection and filter manually
-            try:
-                # Get all items from collection without embedding query
-                all_results = self.collection.get()
-                
-                filtered_docs = []
-                if all_results["documents"] and all_results["metadatas"]:
-                    for i, doc in enumerate(all_results["documents"]):
-                        metadata = all_results["metadatas"][i]
-                        if (metadata.get("user_id") == user_id and 
-                            metadata.get("chat_id") == chat_id):
-                            filtered_docs.append(Document(page_content=doc, metadata=metadata))
-                        if len(filtered_docs) >= limit:
-                            break
-                
-                logger.info(f"Retrieved {len(filtered_docs)} recent memories for chat {chat_id} (manual fallback)")
-                return filtered_docs
-                
-            except Exception as fallback_error:
-                logger.error(f"Manual fallback also failed: {fallback_error}")
-                return []
+            logger.error(f"❌ Failed to get recent memories: {e}")
+            return []
     
     async def delete_chat_memories(self, chat_id: str) -> bool:
-        """Delete all memories for a specific chat - FIXED with proper ChromaDB syntax"""
+        """Delete all memories for a specific chat"""
         try:
-            # For delete, we can use simple syntax since it's only one filter
+            # Simple delete with where clause
             self.collection.delete(
                 where={"chat_id": {"$eq": chat_id}}
             )
-            logger.info(f"Deleted memories for chat {chat_id}")
+            logger.info(f"✅ Deleted memories for chat {chat_id}")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to delete chat memories with direct method: {e}")
-            # Fallback: Get IDs first, then delete by IDs
-            try:
-                results = self.collection.query(
-                    query_texts=["memory to delete"],
-                    n_results=1000
-                )
-                
-                ids_to_delete = []
-                if results["ids"] and results["metadatas"]:
-                    for i, metadata in enumerate(results["metadatas"][0]):
-                        if metadata.get("chat_id") == chat_id:
-                            doc_id = results["ids"][0][i]
-                            ids_to_delete.append(doc_id)
-                
-                if ids_to_delete:
-                    self.collection.delete(ids=ids_to_delete)
-                    logger.info(f"Deleted {len(ids_to_delete)} memories for chat {chat_id} (fallback)")
-                else:
-                    logger.info(f"No memories found to delete for chat {chat_id}")
-                
-                return True
-                
-            except Exception as fallback_error:
-                logger.error(f"Fallback delete also failed: {fallback_error}")
-                return False
+            logger.error(f"❌ Failed to delete chat memories: {e}")
+            return False
 
 def get_memory_manager(
     vectorstore: Chroma = Depends(get_vectorstore),

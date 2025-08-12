@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/lib/supabase'
 import type { User, Session, AuthError } from '@supabase/supabase-js'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://questweaver-819u.onrender.com/'
+// FIXED: Remove trailing slash to prevent double slashes
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://questweaver-819u.onrender.com'
 
 interface AuthContextType {
   user: User | null
@@ -219,6 +220,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       // Step 1: Delete all user data from backend (includes S3, ChromaDB cleanup)
       try {
+        console.log('🗑️ AuthProvider: Making API call to:', `${API_BASE_URL}/api/user/delete-account`)
+        
         const response = await fetch(`${API_BASE_URL}/api/user/delete-account`, {
           method: 'DELETE',
           headers: {
@@ -227,15 +230,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           }
         })
 
+        console.log('🗑️ AuthProvider: Delete API response status:', response.status)
+
         if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || 'Failed to delete user data from backend')
+          const errorText = await response.text()
+          console.error('🗑️ AuthProvider: Delete API error response:', errorText)
+          throw new Error(`Failed to delete user data: ${response.status} ${errorText}`)
         }
 
-        console.log('✅ AuthProvider: Successfully deleted user data from backend')
+        const result = await response.json()
+        console.log('✅ AuthProvider: Successfully deleted user data from backend:', result)
       } catch (error) {
         console.error('❌ AuthProvider: Failed to delete backend data:', error)
-        throw new Error('Failed to delete account data. Please contact support.')
+        throw new Error(`Failed to delete account data: ${error}`)
       }
 
       // Step 2: Sign out and clear local state
