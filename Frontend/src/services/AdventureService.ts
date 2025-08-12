@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://questweaver-819u.onrender.com/'
+// FIXED: Remove trailing slash to prevent double slashes in URLs
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://questweaver-819u.onrender.com'
 
 interface StoryInitRequest {
   genre: string
@@ -105,24 +106,35 @@ interface ImageHealthResponse {
   message: string
 }
 
-// Helper function to get authorization headers
+// Helper function to get authorization headers with better error handling
 async function getAuthHeaders() {
-  const { data: { session } } = await supabase.auth.getSession()
-  
-  if (!session?.access_token) {
-    throw new Error('No authentication token found')
-  }
-  
-  return {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json'
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.error('Auth session error:', error)
+      throw new Error('Authentication error')
+    }
+    
+    if (!session?.access_token) {
+      throw new Error('No authentication token found')
+    }
+    
+    return {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    }
+  } catch (error) {
+    console.error('Failed to get auth headers:', error)
+    throw error
   }
 }
 
 export class AdventureService {
-  // Existing methods remain unchanged
+  // FIXED: Improved error handling for story initialization
   static async initializeStory(request: StoryInitRequest): Promise<StoryResponse> {
     try {
+      console.log('🚀 Initializing story with request:', request)
       const headers = await getAuthHeaders()
       
       const response = await fetch(`${API_BASE_URL}/api/story/init`, {
@@ -136,12 +148,17 @@ export class AdventureService {
         })
       })
 
+      console.log('🚀 Story init response status:', response.status)
+
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+        console.error('🚀 Story init error:', errorData)
         throw new Error(errorData.detail || 'Failed to initialize story')
       }
 
-      return await response.json()
+      const result = await response.json()
+      console.log('🚀 Story init success:', result.success)
+      return result
     } catch (error) {
       console.error('AdventureService.initializeStory error:', error)
       throw error
@@ -162,7 +179,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to process action')
       }
 
@@ -183,7 +200,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to get session history')
       }
 
@@ -194,8 +211,10 @@ export class AdventureService {
     }
   }
 
+  // FIXED: Better handling when no sessions exist
   static async getUserSessions(): Promise<SessionsResponse> {
     try {
+      console.log('📚 Fetching user sessions...')
       const headers = await getAuthHeaders()
       
       const response = await fetch(`${API_BASE_URL}/api/story/sessions`, {
@@ -203,15 +222,32 @@ export class AdventureService {
         headers
       })
 
+      console.log('📚 Sessions response status:', response.status)
+
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+        console.error('📚 Sessions error:', errorData)
         throw new Error(errorData.detail || 'Failed to get user sessions')
       }
 
-      return await response.json()
+      const result = await response.json()
+      console.log('📚 Sessions result:', { 
+        totalSessions: result.total_sessions, 
+        sessionsLength: result.sessions?.length 
+      })
+      
+      // Ensure we always return a valid structure
+      return {
+        sessions: result.sessions || [],
+        total_sessions: result.total_sessions || 0
+      }
     } catch (error) {
       console.error('AdventureService.getUserSessions error:', error)
-      throw error
+      // Return empty result instead of throwing error
+      return {
+        sessions: [],
+        total_sessions: 0
+      }
     }
   }
 
@@ -225,7 +261,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to delete session')
       }
 
@@ -247,7 +283,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to get story summary')
       }
 
@@ -273,7 +309,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to search memories')
       }
 
@@ -300,7 +336,11 @@ export class AdventureService {
       return await response.json()
     } catch (error) {
       console.error('AdventureService.checkMemoryHealth error:', error)
-      throw error
+      return {
+        status: 'unhealthy',
+        memory_system: 'error',
+        message: `Memory health check failed: ${error}`
+      }
     }
   }
 
@@ -325,7 +365,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to get image URL')
       }
 
@@ -346,7 +386,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to get image status')
       }
 
@@ -371,7 +411,7 @@ export class AdventureService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
         throw new Error(errorData.detail || 'Failed to regenerate images')
       }
 
@@ -382,6 +422,7 @@ export class AdventureService {
     }
   }
 
+  // FIXED: Better error handling for health checks
   static async checkImageHealth(): Promise<ImageHealthResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/api/health/images`, {
@@ -398,7 +439,11 @@ export class AdventureService {
       return await response.json()
     } catch (error) {
       console.error('AdventureService.checkImageHealth error:', error)
-      throw error
+      return {
+        status: 'unhealthy',
+        image_system: 'error',
+        message: `Image health check failed: ${error}`
+      }
     }
   }
 
@@ -413,10 +458,11 @@ export class AdventureService {
     }
   }
 
-  // Utility method to check if image features are available
+  // FIXED: Better error handling for image feature availability
   static async isImageGenerationEnabled(): Promise<boolean> {
     try {
       const healthCheck = await this.checkImageHealth()
+      console.log('🖼️ Image health check result:', healthCheck)
       return healthCheck.status === 'healthy'
     } catch (error) {
       console.warn('Image generation not available:', error)
