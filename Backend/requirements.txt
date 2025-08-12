@@ -6,27 +6,30 @@ pydantic==2.5.0
 python-multipart==0.0.6
 supabase==2.0.0
 python-jose[cryptography]==3.3.0
-httpx==0.24.1
 
 
-# Build tools (for better compatibility)
+# Build tools 
 setuptools>=65.0.0
 wheel>=0.38.0
 
-# RAG dependencies (NO sentence-transformers)
+# RAG dependencies - Updated versions for compatibility
 langchain==0.2.17
 langchain-openai==0.1.25
 langchain-community==0.2.19
-chromadb==1.0.15
 
+# Updated ChromaDB to latest stable version for better httpx compatibility
+chromadb==0.4.24
 
+# Core dependencies
 numpy==1.26.4
 pandas==2.2.2
 requests==2.31.0
+tiktoken==0.9.0
+boto3==1.40.6
 
-# Build tools (for native wheels)
+# Image processing
+Pillow==10.0.1
+
+# Build tools
 setuptools==80.9.0
 wheel==0.45.1
-tiktoken==0.9.0
-
-boto3==1.40.6
