@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'questweaver-production.up.railway.app'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://questweaver-production.up.railway.app/'
 
 interface StoryInitRequest {
   genre: string
