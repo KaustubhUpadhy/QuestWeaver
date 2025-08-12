@@ -25,7 +25,7 @@ _vectorstore: Chroma | None = None
 _embeddings: OpenAIEmbeddings | None = None
 
 def get_chroma_client() -> ClientAPI:
-    """Get or create ChromaDB client - Using HttpClient as shown in dashboard"""
+    """Get or create ChromaDB client - Updated for v2 API"""
     global _client
     if _client is None:
         # Require cloud credentials
@@ -44,14 +44,14 @@ def get_chroma_client() -> ClientAPI:
         try:
             logger.info(f"Connecting to Chroma Cloud with tenant: {chroma_tenant}")
             
-            # FIXED: Use HttpClient as shown in ChromaDB dashboard
+            # Use the EXACT format from ChromaDB dashboard
             _client = chromadb.HttpClient(
                 ssl=True,
                 host='api.trychroma.com',
                 tenant=chroma_tenant,
                 database=chroma_database,
                 headers={
-                    'X-Chroma-Token': chroma_api_key
+                    'x-chroma-token': chroma_api_key  # Note: lowercase 'x-chroma-token'
                 }
             )
             
@@ -65,6 +65,7 @@ def get_chroma_client() -> ClientAPI:
             logger.error(f"API Key present: {bool(chroma_api_key)}")
             logger.error(f"Tenant: {chroma_tenant}")
             logger.error(f"Database: {chroma_database}")
+            
             raise Exception(f"ChromaDB Cloud connection failed: {e}")
     
     return _client
@@ -118,6 +119,7 @@ def get_vectorstore(
             raise Exception(f"Failed to initialize vectorstore: {e}")
     return _vectorstore
 
+# Rest of your MemoryManager class remains the same...
 class MemoryManager:
     """Manages story memories with semantic search capabilities"""
     
