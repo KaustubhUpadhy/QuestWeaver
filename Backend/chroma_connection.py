@@ -25,7 +25,7 @@ _vectorstore: Chroma | None = None
 _embeddings: OpenAIEmbeddings | None = None
 
 def get_chroma_client() -> ClientAPI:
-    """Get or create ChromaDB client - CLOUD ONLY with proper configuration"""
+    """Get or create ChromaDB client - CLOUD ONLY with correct API usage"""
     global _client
     if _client is None:
         # Require cloud credentials
@@ -44,21 +44,12 @@ def get_chroma_client() -> ClientAPI:
         try:
             logger.info(f"Connecting to Chroma Cloud with tenant: {chroma_tenant}")
             
-            # FIXED: Use proper ChromaDB Cloud client with correct settings
-            settings = chromadb.config.Settings(
-                chroma_api_impl="chromadb.api.fastapi.FastAPI",
-                chroma_server_host="api.trychroma.com",
-                chroma_server_http_port=443,
-                chroma_server_ssl_enabled=True,
-                chroma_server_grpc_port=None,
-                chroma_api_key=chroma_api_key,
-                anonymized_telemetry=False
-            )
-            
+            # FIXED: Use the correct ChromaDB CloudClient initialization
+            # Don't pass api_key in settings, pass it directly to CloudClient
             _client = chromadb.CloudClient(
                 tenant=chroma_tenant,
                 database=chroma_database,
-                settings=settings
+                api_key=chroma_api_key  # Pass API key directly here
             )
             
             # Test the connection by trying to list collections
@@ -77,6 +68,8 @@ def get_chroma_client() -> ClientAPI:
                 raise Exception(f"ChromaDB tenant '{chroma_tenant}' not found. Please verify your tenant ID in the ChromaDB dashboard.")
             elif "api" in str(e).lower() and "deprecated" in str(e).lower():
                 raise Exception("ChromaDB API version issue. Please check if your ChromaDB plan is active and tenant exists.")
+            elif "validation error" in str(e).lower():
+                raise Exception(f"ChromaDB configuration error. Please check your API key and tenant settings.")
             else:
                 raise Exception(f"ChromaDB Cloud connection failed: {e}")
     
