@@ -93,52 +93,52 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
         onClick={!isLoading ? onClose : undefined}
       />
       
-      {/* Modal */}
-      <div className="relative w-full max-w-2xl mx-4">
-        <div className="bg-gradient-to-b from-primary/20 to-primary/10 p-8 rounded-2xl border border-primary/30 shadow-2xl backdrop-blur-xl">
+      {/* Modal - Changed from max-w-2xl to max-w-lg and reduced padding */}
+      <div className="relative w-full max-w-lg mx-4">
+        <div className="bg-gradient-to-b from-primary/20 to-primary/10 p-6 rounded-2xl border border-primary/30 shadow-2xl backdrop-blur-xl">
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+            className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
             disabled={isLoading}
           >
             <X className="h-5 w-5" />
           </button>
 
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-4">
-              <div className="p-3 bg-gradient-to-br from-primary to-lime-400 rounded-full shadow-glow">
-                <Scroll className="h-8 w-8 text-white" />
+          {/* Header - Reduced spacing */}
+          <div className="text-center mb-6">
+            <div className="flex justify-center mb-3">
+              <div className="p-2.5 bg-gradient-to-br from-primary to-lime-400 rounded-full shadow-glow">
+                <Scroll className="h-6 w-6 text-white" />
               </div>
             </div>
-            <h2 className="text-3xl font-bold text-foreground mb-2">
+            <h2 className="text-2xl font-bold text-foreground mb-2">
               Craft Your Adventure
             </h2>
-            <p className="text-muted-foreground text-lg">
+            <p className="text-muted-foreground">
               Tell us about the story you want to experience
             </p>
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
+              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
               <span className="text-red-500 text-sm">{error}</span>
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Form - Reduced spacing throughout */}
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Genre Field */}
             <div className="space-y-2">
-              <div className="flex items-center space-x-2 mb-2">
-                <Sparkles className="h-5 w-5 text-primary" />
-                <label className="text-lg font-semibold text-foreground">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <label className="text-sm font-semibold text-foreground">
                   Genre (Optional)
                 </label>
               </div>
-              <p className="text-sm text-muted-foreground/70 mb-3">
+              <p className="text-xs text-muted-foreground/70">
                 Enter what genre(s) you want the story to be
               </p>
               <Input
@@ -146,67 +146,67 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
                 value={formData.genre}
                 onChange={(e) => handleInputChange('genre', e.target.value)}
                 placeholder="Fantasy, Sci-fi, Horror, Mystery, Adventure..."
-                className="bg-background/50 border-primary/30 focus:border-primary text-foreground placeholder:text-muted-foreground text-lg p-4"
+                className="bg-background/50 border-primary/30 focus:border-primary text-foreground placeholder:text-muted-foreground"
                 disabled={isLoading}
               />
             </div>
 
             {/* Character Field */}
             <div className="space-y-2">
-              <div className="flex items-center space-x-2 mb-2">
-                <User className="h-5 w-5 text-primary" />
-                <label className="text-lg font-semibold text-foreground">
+              <div className="flex items-center space-x-2">
+                <User className="h-4 w-4 text-primary" />
+                <label className="text-sm font-semibold text-foreground">
                   Character (Optional)
                 </label>
               </div>
-              <p className="text-sm text-muted-foreground/70 mb-3">
+              <p className="text-xs text-muted-foreground/70">
                 Enter the character you want to play (name, role, lore, etc.)
               </p>
               <textarea
                 value={formData.character}
                 onChange={(e) => handleInputChange('character', e.target.value)}
                 placeholder="A brave knight named Sir Gareth, sworn to protect the realm..."
-                className="w-full bg-background/50 border border-primary/30 focus:border-primary text-foreground placeholder:text-muted-foreground text-lg p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/60 resize-none"
-                rows={3}
+                className="w-full bg-background/50 border border-primary/30 focus:border-primary text-foreground placeholder:text-muted-foreground p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/60 resize-none text-sm"
+                rows={2}
                 disabled={isLoading}
               />
             </div>
 
             {/* World Additions Field */}
             <div className="space-y-2">
-              <div className="flex items-center space-x-2 mb-2">
-                <Globe className="h-5 w-5 text-primary" />
-                <label className="text-lg font-semibold text-foreground">
+              <div className="flex items-center space-x-2">
+                <Globe className="h-4 w-4 text-primary" />
+                <label className="text-sm font-semibold text-foreground">
                   World Details (Optional)
                 </label>
               </div>
-              <p className="text-sm text-muted-foreground/70 mb-3">
+              <p className="text-xs text-muted-foreground/70">
                 Enter any extra world information (factions, locations, details)
               </p>
               <textarea
                 value={formData.worldAdditions}
                 onChange={(e) => handleInputChange('worldAdditions', e.target.value)}
                 placeholder="The kingdom of Eldoria is at war with the Shadow Lords..."
-                className="w-full bg-background/50 border border-primary/30 focus:border-primary text-foreground placeholder:text-muted-foreground text-lg p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/60 resize-none"
-                rows={3}
+                className="w-full bg-background/50 border border-primary/30 focus:border-primary text-foreground placeholder:text-muted-foreground p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/60 resize-none text-sm"
+                rows={2}
                 disabled={isLoading}
               />
             </div>
 
             {/* Actions Field */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2 mb-2">
-                <Zap className="h-5 w-5 text-primary" />
-                <label className="text-lg font-semibold text-foreground">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Zap className="h-4 w-4 text-primary" />
+                <label className="text-sm font-semibold text-foreground">
                   Action Suggestions *
                 </label>
               </div>
-              <p className="text-sm text-muted-foreground/70 mb-4">
+              <p className="text-xs text-muted-foreground/70">
                 Do you want possible actions given after each response?
               </p>
               
-              <div className="flex space-x-6">
-                <label className="flex items-center space-x-3 cursor-pointer group">
+              <div className="flex space-x-4">
+                <label className="flex items-center space-x-2 cursor-pointer group">
                   <div className="relative">
                     <input
                       type="radio"
@@ -217,24 +217,24 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
                       className="sr-only"
                       disabled={isLoading}
                     />
-                    <div className={`w-6 h-6 rounded-full border-2 transition-all duration-200 ${
+                    <div className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
                       formData.actions === 'yes' 
                         ? 'border-primary bg-primary shadow-glow' 
                         : 'border-muted-foreground group-hover:border-primary/60'
                     }`}>
                       {formData.actions === 'yes' && (
-                        <div className="w-2 h-2 bg-white rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                        <div className="w-1.5 h-1.5 bg-white rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
                       )}
                     </div>
                   </div>
-                  <span className={`text-lg transition-colors ${
+                  <span className={`text-sm transition-colors ${
                     formData.actions === 'yes' ? 'text-primary font-medium' : 'text-foreground'
                   }`}>
                     Yes
                   </span>
                 </label>
 
-                <label className="flex items-center space-x-3 cursor-pointer group">
+                <label className="flex items-center space-x-2 cursor-pointer group">
                   <div className="relative">
                     <input
                       type="radio"
@@ -245,17 +245,17 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
                       className="sr-only"
                       disabled={isLoading}
                     />
-                    <div className={`w-6 h-6 rounded-full border-2 transition-all duration-200 ${
+                    <div className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
                       formData.actions === 'no' 
                         ? 'border-primary bg-primary shadow-glow' 
                         : 'border-muted-foreground group-hover:border-primary/60'
                     }`}>
                       {formData.actions === 'no' && (
-                        <div className="w-2 h-2 bg-white rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                        <div className="w-1.5 h-1.5 bg-white rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
                       )}
                     </div>
                   </div>
-                  <span className={`text-lg transition-colors ${
+                  <span className={`text-sm transition-colors ${
                     formData.actions === 'no' ? 'text-primary font-medium' : 'text-foreground'
                   }`}>
                     No
@@ -265,20 +265,20 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
             </div>
 
             {/* Submit Button */}
-            <div className="pt-6">
+            <div className="pt-4">
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full gradient-primary text-white font-bold text-xl py-4 rounded-xl shadow-glow hover:shadow-elegant transition-all duration-300 transform hover:scale-[1.02]"
+                className="w-full gradient-primary text-white font-bold py-3 rounded-xl shadow-glow hover:shadow-elegant transition-all duration-300 transform hover:scale-[1.02]"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center space-x-2">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     <span>Creating Adventure...</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center space-x-2">
-                    <Sparkles className="h-6 w-6" />
+                    <Sparkles className="h-5 w-5" />
                     <span>Start My Adventure</span>
                   </div>
                 )}
@@ -287,8 +287,8 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
           </form>
 
           {/* Footer Hint */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground/70">
+          <div className="mt-4 text-center">
+            <p className="text-xs text-muted-foreground/70">
               ✨ Your adventure will be uniquely crafted by AI based on your preferences
             </p>
           </div>
