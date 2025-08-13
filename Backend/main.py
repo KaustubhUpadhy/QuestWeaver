@@ -114,6 +114,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    allow_origin_regex=r"https://quest-weaver.*\.vercel\.app",
 )
 
 # Security
