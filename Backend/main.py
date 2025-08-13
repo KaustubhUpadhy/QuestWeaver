@@ -108,9 +108,11 @@ app = FastAPI(title="Interactive Story Generator API with RAG and Images", versi
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://quest-weaver.vercel.app/",
+                   "https://quest-weaver-git-main-kaustubhupadhys-projects.vercel.app/",
+                   "https://quest-weaver-kaustubhupadhys-projects.vercel.app/"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
