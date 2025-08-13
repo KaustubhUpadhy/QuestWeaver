@@ -63,100 +63,6 @@ const Adventures = () => {
   const { isAuthenticated, isLoading } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // DEBUG COMPONENT - Add this for troubleshooting
-  const ImageDebugInfo = ({ adventure }: { adventure: Adventure }) => {
-    const [debugInfo, setDebugInfo] = useState<any>(null)
-    const [isDebugging, setIsDebugging] = useState(false)
-
-    const debugImageLoading = async () => {
-      if (isDebugging) return
-      setIsDebugging(true)
-      
-      try {
-        console.log('🔍 Debug: Starting image debug for adventure:', adventure.sessionId)
-        
-        // 1. Check image status
-        const status = await AdventureService.getImageStatus(adventure.sessionId)
-        console.log('🔍 Debug: Image status:', status)
-        
-        // 2. Try to get world image URL
-        let worldUrlResult = null
-        if (status.world_status === 'ready') {
-          try {
-            worldUrlResult = await AdventureService.getImageUrl(adventure.sessionId, 'world', 'web')
-            console.log('🔍 Debug: World image URL result:', worldUrlResult)
-          } catch (error) {
-            console.error('🔍 Debug: World image URL error:', error)
-            worldUrlResult = { error: (error as Error).message }
-          }
-        }
-        
-        // 3. Try to get character image URL
-        let characterUrlResult = null
-        if (status.character_status === 'ready') {
-          try {
-            characterUrlResult = await AdventureService.getImageUrl(adventure.sessionId, 'character', 'avatar')
-            console.log('🔍 Debug: Character image URL result:', characterUrlResult)
-          } catch (error) {
-            console.error('🔍 Debug: Character image URL error:', error)
-            characterUrlResult = { error: (error as Error).message }
-          }
-        }
-        
-        setDebugInfo({
-          status,
-          worldUrlResult,
-          characterUrlResult,
-          currentWorldUrl: adventure.worldImageUrl,
-          currentCharacterUrl: adventure.characterImageUrl,
-          isImagesLoading: adventure.isImagesLoading,
-          imageLoadError: adventure.imageLoadError
-        })
-        
-      } catch (error) {
-        console.error('🔍 Debug: Debug process failed:', error)
-        setDebugInfo({ error: (error as Error).message })
-      } finally {
-        setIsDebugging(false)
-      }
-    }
-
-    return (
-      <div className="p-2 border border-yellow-300 bg-yellow-50 rounded text-xs mt-2">
-        <div className="flex items-center justify-between mb-2">
-          <span className="font-medium">Image Debug: {adventure.title.substring(0, 20)}...</span>
-          <button 
-            onClick={debugImageLoading}
-            disabled={isDebugging}
-            className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50"
-          >
-            {isDebugging ? 'Debugging...' : 'Debug Images'}
-          </button>
-        </div>
-        
-        {debugInfo && (
-          <div className="space-y-1 text-xs">
-            <div><strong>Status:</strong> World({debugInfo.status?.world_status}) Character({debugInfo.status?.character_status})</div>
-            <div><strong>Current URLs:</strong> World({adventure.worldImageUrl ? '✓' : '✗'}) Character({adventure.characterImageUrl ? '✓' : '✗'})</div>
-            <div><strong>Loading:</strong> {adventure.isImagesLoading ? 'Yes' : 'No'} | <strong>Error:</strong> {adventure.imageLoadError ? 'Yes' : 'No'}</div>
-            
-            {debugInfo.worldUrlResult && (
-              <div><strong>World URL API:</strong> {debugInfo.worldUrlResult.success ? '✓' : `✗ ${debugInfo.worldUrlResult.message || debugInfo.worldUrlResult.error}`}</div>
-            )}
-            
-            {debugInfo.characterUrlResult && (
-              <div><strong>Character URL API:</strong> {debugInfo.characterUrlResult.success ? '✓' : `✗ ${debugInfo.characterUrlResult.message || debugInfo.characterUrlResult.error}`}</div>
-            )}
-            
-            {debugInfo.error && (
-              <div className="text-red-600"><strong>Error:</strong> {debugInfo.error}</div>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   // Get current message for selected adventure
   const currentMessage = selectedAdventure ? (messages[selectedAdventure.sessionId] || '') : ''
   
@@ -188,13 +94,13 @@ const Adventures = () => {
     })
   }
 
-  // FIXED: Helper function to update adventure image URLs
-  const updateAdventureImages = async (adventure: Adventure): Promise<Adventure> => {
+  // FIXED: Helper function to update adventure image URLs with force refresh option
+  const updateAdventureImages = async (adventure: Adventure, forceRefresh: boolean = false): Promise<Adventure> => {
     if (!imageGenerationEnabled) return adventure
 
     try {
-      // Use the new retry method
-      return await AdventureService.loadAdventureImagesWithRetry(adventure, 2)
+      // Use the enhanced retry method with force refresh capability
+      return await AdventureService.loadAdventureImagesWithRetry(adventure, 2, forceRefresh)
     } catch (error) {
       console.error('Failed to update adventure images:', error)
       return {
@@ -464,6 +370,60 @@ const Adventures = () => {
     }
   }
 
+  // NEW: Force refresh images for selected adventure
+  const refreshSelectedAdventureImages = async () => {
+    if (!selectedAdventure || !imageGenerationEnabled) return
+
+    try {
+      console.log('🔄 Force refreshing selected adventure images')
+      
+      // Clear cache first
+      AdventureService.clearImageCache(selectedAdventure.sessionId)
+      
+      const refreshedAdventure = await AdventureService.forceRefreshAdventureImages(selectedAdventure)
+      
+      // Update both selected adventure and adventures list
+      setSelectedAdventure(refreshedAdventure)
+      setAdventures(prev => prev.map(adv => 
+        adv.sessionId === selectedAdventure.sessionId ? refreshedAdventure : adv
+      ))
+      
+      console.log('🔄 Selected adventure images refreshed')
+    } catch (error) {
+      console.error('🔄 Failed to refresh selected adventure images:', error)
+    }
+  }
+
+  // NEW: Force refresh images for any adventure
+  const forceRefreshAdventureImages = async (sessionId: string) => {
+    console.log(`🔄 Force refreshing images for session: ${sessionId}`)
+    
+    try {
+      // Clear cache first
+      AdventureService.clearImageCache(sessionId)
+      
+      // Find and update the adventure
+      const adventureToUpdate = adventures.find(adv => adv.sessionId === sessionId)
+      if (adventureToUpdate) {
+        const refreshedAdventure = await AdventureService.forceRefreshAdventureImages(adventureToUpdate)
+        
+        // Update adventures list
+        setAdventures(prev => prev.map(adv => 
+          adv.sessionId === sessionId ? refreshedAdventure : adv
+        ))
+        
+        // Update selected adventure if it matches
+        if (selectedAdventure?.sessionId === sessionId) {
+          setSelectedAdventure(refreshedAdventure)
+        }
+        
+        console.log('🔄 Force refresh completed')
+      }
+    } catch (error) {
+      console.error('🔄 Force refresh failed:', error)
+    }
+  }
+
   const filteredAdventures = adventures.filter(adventure =>
     adventure.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -493,19 +453,19 @@ const Adventures = () => {
     }
   }, [isAuthenticated, imageGenerationEnabled])
 
-  // FIXED: Update images for pending adventures periodically
+  // FIXED: Improved image synchronization with better state management
   useEffect(() => {
-    if (!imageGenerationEnabled || !isAuthenticated) return
+    if (!imageGenerationEnabled || !isAuthenticated || adventures.length === 0) return
 
     const updateImagesForPendingAdventures = async () => {
       const adventuresNeedingUpdates = adventures.filter(adv => 
-        adv.isImagesLoading && adv.imageStatus && !adv.imageLoadError
+        adv.isImagesLoading && !adv.imageLoadError
       )
       
       if (adventuresNeedingUpdates.length === 0) return
 
       try {
-        console.log(`🖼️ Updating images for ${adventuresNeedingUpdates.length} pending adventures`)
+        console.log(`🖼️ Adventures: Updating images for ${adventuresNeedingUpdates.length} pending adventures`)
         
         const updatedAdventures = await Promise.allSettled(
           adventures.map(async (adventure) => {
@@ -549,16 +509,19 @@ const Adventures = () => {
         })
 
         if (hasChanges) {
+          console.log('🖼️ Adventures: Updating adventures with new image data')
           setAdventures(processedAdventures)
           
-          // Update selected adventure if it was updated
+          // CRITICAL FIX: Synchronize selected adventure immediately
           if (selectedAdventure) {
             const updatedSelected = processedAdventures.find(adv => adv.sessionId === selectedAdventure.sessionId)
             if (updatedSelected && (
               updatedSelected.worldImageUrl !== selectedAdventure.worldImageUrl ||
               updatedSelected.characterImageUrl !== selectedAdventure.characterImageUrl ||
-              updatedSelected.isImagesLoading !== selectedAdventure.isImagesLoading
+              updatedSelected.isImagesLoading !== selectedAdventure.isImagesLoading ||
+              updatedSelected.imageLoadError !== selectedAdventure.imageLoadError
             )) {
+              console.log('🖼️ Adventures: Syncing selected adventure with new images')
               setSelectedAdventure(updatedSelected)
             }
           }
@@ -568,10 +531,13 @@ const Adventures = () => {
       }
     }
 
-    // Update images every 15 seconds for pending adventures (increased interval)
-    const interval = setInterval(updateImagesForPendingAdventures, 15000)
+    // CRITICAL FIX: Immediate update when adventures change, then periodic updates
+    updateImagesForPendingAdventures()
+
+    // Update images every 10 seconds for pending adventures (more frequent)
+    const interval = setInterval(updateImagesForPendingAdventures, 10000)
     return () => clearInterval(interval)
-  }, [adventures, imageGenerationEnabled, isAuthenticated, selectedAdventure])
+  }, [adventures, imageGenerationEnabled, isAuthenticated, selectedAdventure?.sessionId])
 
   // Handle URL parameter for selecting specific adventure
   useEffect(() => {
@@ -1143,6 +1109,19 @@ const Adventures = () => {
                     </div>
                     
                     <div className="flex items-center gap-2">
+                      {/* Manual Refresh Button */}
+                      {imageGenerationEnabled && (selectedAdventure.isImagesLoading || selectedAdventure.imageLoadError) && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={refreshSelectedAdventureImages}
+                          className="text-muted-foreground hover:text-primary transition-colors"
+                          title="Refresh images"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      )}
+                      
                       {/* Regenerate Images Button */}
                       {imageGenerationEnabled && selectedAdventure.imageStatus && 
                        (selectedAdventure.imageStatus.world_status === 'failed' || selectedAdventure.imageStatus.character_status === 'failed' || selectedAdventure.imageLoadError) && (
