@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import uuid
@@ -108,15 +109,125 @@ app = FastAPI(title="Interactive Story Generator API with RAG and Images", versi
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://quest-weaver.vercel.app",
-                   "https://quest-weaver-git-main-kaustubhupadhys-projects.vercel.app",
-                   "https://quest-weaver-kaustubhupadhys-projects.vercel.app"],
+    allow_origins=[
+        "https://quest-weaver.vercel.app",
+        "https://quest-weaver-git-main-kaustubhupadhys-projects.vercel.app",
+        "https://quest-weaver-kaustubhupadhys-projects.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     allow_origin_regex=r"https://quest-weaver.*\.vercel\.app",
+    # Add these critical headers for preflight requests:
+    expose_headers=["*"],
+    max_age=3600  # Cache preflight for 1 hour
 )
 
+# Also add a specific OPTIONS handler for the images endpoint:
+@app.options("/api/health/images")
+async def options_health_images():
+    """Handle preflight for health images endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+@app.options("/api/story/sessions")
+async def options_story_sessions():
+    """Handle preflight for story sessions endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+@app.options("/api/images/status/{chat_id}")
+async def options_image_status(chat_id: str):
+    """Handle preflight for image status endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+@app.options("/api/images/get-url")
+async def options_image_get_url():
+    """Handle preflight for get image URL endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+@app.options("/api/images/regenerate")
+async def options_image_regenerate():
+    """Handle preflight for regenerate images endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+@app.options("/api/story/init")
+async def options_story_init():
+    """Handle preflight for story init endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+@app.options("/api/story/action")
+async def options_story_action():
+    """Handle preflight for story action endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+# ========== CATCH-ALL OPTIONS HANDLER ==========
+@app.options("/{full_path:path}")
+async def options_catch_all(full_path: str):
+    """Catch-all OPTIONS handler for any endpoint"""
+    return JSONResponse(
+        content={"status": "ok"}, 
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
 # Security
 security = HTTPBearer()
 
