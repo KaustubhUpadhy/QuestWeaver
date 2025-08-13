@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/lib/supabase'
 import type { User, Session, AuthError } from '@supabase/supabase-js'
 
-// FIXED: Remove trailing slash to prevent double slashes
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://questweaver-819u.onrender.com'
 
 interface AuthContextType {
@@ -41,22 +41,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Get initial session with better error handling
     const getInitialSession = async () => {
       try {
-        console.log('🔐 AuthProvider: Getting initial session...')
+        console.log('AuthProvider: Getting initial session...')
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (error) {
-          console.error('🔐 AuthProvider: Error getting session:', error)
+          console.error('AuthProvider: Error getting session:', error)
           // Don't throw error, just log it and continue with null session
           setSession(null)
           setUser(null)
         } else {
-          console.log('🔐 AuthProvider: Initial session retrieved:', session ? 'authenticated' : 'not authenticated')
+          console.log('AuthProvider: Initial session retrieved:', session ? 'authenticated' : 'not authenticated')
           setSession(session)
           setUser(session?.user ?? null)
         }
       } catch (error) {
-        console.error('🔐 AuthProvider: Error in getInitialSession:', error)
-        // Ensure we don't crash the app
+        console.error('AuthProvider: Error in getInitialSession:', error)
         setSession(null)
         setUser(null)
       } finally {
@@ -74,19 +73,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         data: { subscription: authSubscription },
       } = supabase.auth.onAuthStateChange(async (event, session) => {
         try {
-          console.log('🔐 AuthProvider: Auth state changed:', event, session?.user?.email || 'no user')
+          console.log('AuthProvider: Auth state changed:', event, session? 'authenticated' : 'not authenticated')
           setSession(session)
           setUser(session?.user ?? null)
           setIsLoading(false)
         } catch (error) {
-          console.error('🔐 AuthProvider: Error in auth state change handler:', error)
+          console.error('AuthProvider: Error in auth state change handler:', error)
           setIsLoading(false)
         }
       })
       
       subscription = authSubscription
     } catch (error) {
-      console.error('🔐 AuthProvider: Error setting up auth state listener:', error)
+      console.error('AuthProvider: Error setting up auth state listener:', error)
       setIsLoading(false)
     }
 
@@ -95,7 +94,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
           subscription.unsubscribe()
         } catch (error) {
-          console.error('🔐 AuthProvider: Error unsubscribing from auth changes:', error)
+          console.error(' AuthProvider: Error unsubscribing from auth changes:', error)
         }
       }
     }
@@ -103,7 +102,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     try {
-      console.log('🔐 AuthProvider: Attempting sign up for:', email)
+      console.log('AuthProvider: Sign up attempt initiated')
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -115,42 +114,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       })
       
       if (error) {
-        console.error('🔐 AuthProvider: Sign up error:', error)
+        console.error('AuthProvider: Sign up error:', error)
       } else {
-        console.log('🔐 AuthProvider: Sign up successful')
+        console.log('AuthProvider: Sign up successful')
       }
       
       return { error }
     } catch (error) {
-      console.error('🔐 AuthProvider: Sign up exception:', error)
+      console.error('AuthProvider: Sign up exception:', error)
       return { error: error as AuthError }
     }
   }
 
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('🔐 AuthProvider: Attempting sign in for:', email)
+      console.log('AuthProvider: Sign in attempt initiated')
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       
       if (error) {
-        console.error('🔐 AuthProvider: Sign in error:', error)
+        console.error('AuthProvider: Sign in error:', error)
       } else {
-        console.log('🔐 AuthProvider: Sign in successful')
+        console.log('AuthProvider: Sign in successful')
       }
       
       return { error }
     } catch (error) {
-      console.error('🔐 AuthProvider: Sign in exception:', error)
+      console.error('AuthProvider: Sign in exception:', error)
       return { error: error as AuthError }
     }
   }
 
   const signInWithProvider = async (provider: 'google' | 'github') => {
     try {
-      console.log('🔐 AuthProvider: Attempting OAuth sign in with:', provider)
+      console.log('AuthProvider: OAuth sign in initiated with:', provider)
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -159,52 +158,52 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       })
       
       if (error) {
-        console.error('🔐 AuthProvider: OAuth sign in error:', error)
+        console.error('AuthProvider: OAuth sign in error:', error)
       } else {
-        console.log('🔐 AuthProvider: OAuth sign in initiated')
+        console.log('AuthProvider: OAuth sign in initiated')
       }
       
       return { error }
     } catch (error) {
-      console.error('🔐 AuthProvider: OAuth sign in exception:', error)
+      console.error('AuthProvider: OAuth sign in exception:', error)
       return { error: error as AuthError }
     }
   }
 
   const signOut = async () => {
     try {
-      console.log('🔐 AuthProvider: Attempting sign out')
+      console.log('AuthProvider: Attempting sign out')
       const { error } = await supabase.auth.signOut()
       
       if (error) {
-        console.error('🔐 AuthProvider: Sign out error:', error)
+        console.error('AuthProvider: Sign out error:', error)
       } else {
-        console.log('🔐 AuthProvider: Sign out successful')
+        console.log('AuthProvider: Sign out successful')
       }
       
       return { error }
     } catch (error) {
-      console.error('🔐 AuthProvider: Sign out exception:', error)
+      console.error('AuthProvider: Sign out exception:', error)
       return { error: error as AuthError }
     }
   }
 
   const resetPassword = async (email: string) => {
     try {
-      console.log('🔐 AuthProvider: Attempting password reset for:', email)
+      console.log('AuthProvider: Attempting password reset ')
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
       
       if (error) {
-        console.error('🔐 AuthProvider: Password reset error:', error)
+        console.error('AuthProvider: Password reset error:', error)
       } else {
-        console.log('🔐 AuthProvider: Password reset email sent')
+        console.log('AuthProvider: Password reset email sent')
       }
       
       return { error }
     } catch (error) {
-      console.error('🔐 AuthProvider: Password reset exception:', error)
+      console.error('AuthProvider: Password reset exception:', error)
       return { error: error as AuthError }
     }
   }
@@ -216,11 +215,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error('No authenticated user found')
       }
 
-      console.log('🗑️ AuthProvider: Starting account deletion process for user:', user.id)
+      console.log('AuthProvider: Starting account deletion process for user')
 
       // Step 1: Delete all user data from backend (includes S3, ChromaDB cleanup)
       try {
-        console.log('🗑️ AuthProvider: Making API call to:', `${API_BASE_URL}/api/user/delete-account`)
+        console.log('AuthProvider: Initiating account deletion process',)
         
         const response = await fetch(`${API_BASE_URL}/api/user/delete-account`, {
           method: 'DELETE',
@@ -239,9 +238,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         const result = await response.json()
-        console.log('✅ AuthProvider: Successfully deleted user data from backend:', result)
+        console.log('AuthProvider: Successfully deleted user data from backend:', result)
       } catch (error) {
-        console.error('❌ AuthProvider: Failed to delete backend data:', error)
+        console.error('AuthProvider: Failed to delete backend data:', error)
         throw new Error(`Failed to delete account data: ${error}`)
       }
 
@@ -250,13 +249,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setUser(null)
       setSession(null)
       
-      console.log('✅ AuthProvider: Account deletion completed successfully')
+      console.log('AuthProvider: Account deletion completed successfully')
       
       // Redirect to home page
       window.location.href = '/'
       
     } catch (error) {
-      console.error('🚨 AuthProvider: Account deletion failed:', error)
+      console.error('AuthProvider: Account deletion failed:', error)
       throw error
     }
   }

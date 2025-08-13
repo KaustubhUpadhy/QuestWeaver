@@ -31,7 +31,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Only action suggestions is required, everything else is optional
+    
     
     setIsLoading(true)
     setError(null)
@@ -93,7 +93,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
         onClick={!isLoading ? onClose : undefined}
       />
       
-      {/* Modal - Changed from max-w-2xl to max-w-lg and reduced padding */}
+      
       <div className="relative w-full max-w-lg mx-4">
         <div className="bg-gradient-to-b from-primary/20 to-primary/10 p-6 rounded-2xl border border-primary/30 shadow-2xl backdrop-blur-xl">
           {/* Close Button */}
@@ -105,7 +105,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
             <X className="h-5 w-5" />
           </button>
 
-          {/* Header - Reduced spacing */}
+          
           <div className="text-center mb-6">
             <div className="flex justify-center mb-3">
               <div className="p-2.5 bg-gradient-to-br from-primary to-lime-400 rounded-full shadow-glow">
@@ -128,7 +128,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
             </div>
           )}
 
-          {/* Form - Reduced spacing throughout */}
+          
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Genre Field */}
             <div className="space-y-2">
