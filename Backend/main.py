@@ -31,7 +31,57 @@ supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
 # Initialize as None first
 supabase_admin = None
 supabase_client = None
+# Add these imports
+from functools import wraps
+import time
+from collections import defaultdict, deque
 
+# Simple in-memory rate limiter (no external dependencies)
+class SimpleRateLimiter:
+    def __init__(self):
+        self.requests = defaultdict(deque)
+    
+    def is_allowed(self, key: str, max_requests: int, window_seconds: int) -> bool:
+        now = time.time()
+        window_start = now - window_seconds
+        
+        # Clean old requests
+        while self.requests[key] and self.requests[key][0] < window_start:
+            self.requests[key].popleft()
+        
+        # Check if under limit
+        if len(self.requests[key]) < max_requests:
+            self.requests[key].append(now)
+            return True
+        
+        return False
+
+# Global rate limiter instance
+rate_limiter = SimpleRateLimiter()
+
+def rate_limit(max_requests: int, window_seconds: int):
+    """Decorator for rate limiting endpoints"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Get user ID from dependencies
+            user_id = None
+            for key, value in kwargs.items():
+                if key == 'user_id':
+                    user_id = value
+                    break
+            
+            if user_id:
+                rate_key = f"{func.__name__}:{user_id}"
+                if not rate_limiter.is_allowed(rate_key, max_requests, window_seconds):
+                    raise HTTPException(
+                        status_code=429, 
+                        detail=f"Rate limit exceeded. Max {max_requests} requests per {window_seconds} seconds."
+                    )
+            
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
 # Don't crash if Supabase fails
 try:
     if all([supabase_url, supabase_service_key, supabase_anon_key]):
@@ -380,6 +430,7 @@ def get_story_generator(memory_manager: MemoryManager = Depends(get_memory_manag
 
 # API Endpoints
 @app.post("/api/story/init", response_model=StoryResponse)
+@rate_limit(max_requests=5, window_seconds=60)
 async def initialize_story(
     request: StoryInitRequest, 
     background_tasks: BackgroundTasks,
@@ -439,6 +490,7 @@ async def initialize_story(
         raise HTTPException(status_code=500, detail=f"Failed to initialize story: {str(e)}")
 
 @app.post("/api/story/action", response_model=StoryResponse)
+@rate_limit(max_requests=30, window_seconds=60)
 async def take_story_action(
     request: StoryActionRequest, 
     user_id: str = Depends(get_current_user),
@@ -641,6 +693,7 @@ async def get_image_status(
         raise HTTPException(status_code=500, detail=f"Failed to get image status: {str(e)}")
 
 @app.post("/api/images/regenerate")
+@rate_limit(max_requests=3, window_seconds=60)
 async def regenerate_images(
     chat_id: str,
     background_tasks: BackgroundTasks,

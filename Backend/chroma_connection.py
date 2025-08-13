@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional
 import logging
 import time
 import json
+from functools import lru_cache
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -17,84 +18,80 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Global clients
-_client: ClientAPI | None = None
-_collection: Collection | None = None
-_embeddings: OpenAIEmbeddings | None = None
+
+@lru_cache()
+def create_chroma_client() -> ClientAPI:
+    """Create ChromaDB client - cached for reuse"""
+    chroma_api_key = os.getenv("CHROMA_API_KEY")
+    chroma_tenant = os.getenv("CHROMA_TENANT") 
+    chroma_database = os.getenv("CHROMA_DATABASE")
+    
+    if not all([chroma_api_key, chroma_tenant, chroma_database]):
+        missing = []
+        if not chroma_api_key: missing.append("CHROMA_API_KEY")
+        if not chroma_tenant: missing.append("CHROMA_TENANT") 
+        if not chroma_database: missing.append("CHROMA_DATABASE")
+        
+        raise Exception(f"Missing ChromaDB Cloud credentials: {', '.join(missing)}")
+    
+    try:
+        logger.info(f"Connecting to Chroma Cloud with tenant: {chroma_tenant}")
+        
+        client = chromadb.HttpClient(
+            ssl=True,
+            host='api.trychroma.com',
+            tenant=chroma_tenant,
+            database=chroma_database,
+            headers={
+                'x-chroma-token': chroma_api_key
+            }
+        )
+        
+        # Test the connection
+        collections = client.list_collections()
+        logger.info(f"✅ Successfully connected to Chroma Cloud! Found {len(collections)} collections")
+        return client
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to Chroma Cloud: {e}")
+        raise Exception(f"ChromaDB Cloud connection failed: {e}")
 
 def get_chroma_client() -> ClientAPI:
-    """Get or create ChromaDB client - Direct ChromaDB 1.0.16 connection"""
-    global _client
-    if _client is None:
-        chroma_api_key = os.getenv("CHROMA_API_KEY")
-        chroma_tenant = os.getenv("CHROMA_TENANT") 
-        chroma_database = os.getenv("CHROMA_DATABASE")
-        
-        if not all([chroma_api_key, chroma_tenant, chroma_database]):
-            missing = []
-            if not chroma_api_key: missing.append("CHROMA_API_KEY")
-            if not chroma_tenant: missing.append("CHROMA_TENANT") 
-            if not chroma_database: missing.append("CHROMA_DATABASE")
-            
-            raise Exception(f"Missing ChromaDB Cloud credentials: {', '.join(missing)}")
-        
-        try:
-            logger.info(f"Connecting to Chroma Cloud with tenant: {chroma_tenant}")
-            
-            # Use exact format from ChromaDB dashboard
-            _client = chromadb.HttpClient(
-                ssl=True,
-                host='api.trychroma.com',
-                tenant=chroma_tenant,
-                database=chroma_database,
-                headers={
-                    'x-chroma-token': chroma_api_key
-                }
-            )
-            
-            # Test the connection
-            collections = _client.list_collections()
-            logger.info(f"✅ Successfully connected to Chroma Cloud! Found {len(collections)} collections")
-            return _client
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to connect to Chroma Cloud: {e}")
-            logger.error(f"API Key present: {bool(chroma_api_key)}")
-            logger.error(f"Tenant: {chroma_tenant}")
-            logger.error(f"Database: {chroma_database}")
-            raise Exception(f"ChromaDB Cloud connection failed: {e}")
-    
-    return _client
+    """Get ChromaDB client"""
+    return create_chroma_client()
 
 def get_chroma_collection(client: ClientAPI = Depends(get_chroma_client)) -> Collection:
     """Get or create ChromaDB collection for quest memories"""
-    global _collection
-    if _collection is None:
-        try:
-            _collection = client.get_or_create_collection(
-                name="quest_memories",
-                metadata={"description": "Story memories and world events for QuestWeaver AI"}
-            )
-            logger.info("✅ Connected to quest_memories collection")
-        except Exception as e:
-            logger.error(f"❌ Failed to get/create collection: {e}")
-            raise Exception(f"Failed to initialize ChromaDB collection: {e}")
-    return _collection
+    try:
+        collection = client.get_or_create_collection(
+            name="quest_memories",
+            metadata={"description": "Story memories and world events for QuestWeaver AI"}
+        )
+        logger.info("✅ Connected to quest_memories collection")
+        return collection
+    except Exception as e:
+        logger.error(f"❌ Failed to get/create collection: {e}")
+        raise Exception(f"Failed to initialize ChromaDB collection: {e}")
+
+@lru_cache()
+def create_embeddings() -> OpenAIEmbeddings:
+    """Create OpenAI embeddings instance - cached for reuse"""
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise Exception("OPENAI_API_KEY environment variable is required")
+        
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=openai_api_key,
+        model="text-embedding-ada-002"
+    )
+    logger.info("✅ Initialized OpenAI embeddings (text-embedding-ada-002)")
+    return embeddings
 
 def get_embeddings() -> OpenAIEmbeddings:
     """Get OpenAI embeddings instance"""
-    global _embeddings
-    if _embeddings is None:
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
-            raise Exception("OPENAI_API_KEY environment variable is required")
-            
-        _embeddings = OpenAIEmbeddings(
-            openai_api_key=openai_api_key,
-            model="text-embedding-ada-002"
-        )
-        logger.info("✅ Initialized OpenAI embeddings (text-embedding-ada-002)")
-    return _embeddings
+    return create_embeddings()
+
+# Rest of the file stays the same...
 
 class DirectChromaMemoryManager:
     """Direct ChromaDB integration without LangChain-Chroma"""
