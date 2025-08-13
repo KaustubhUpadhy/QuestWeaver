@@ -377,56 +377,25 @@ export class AdventureService {
   }
 
   static async getImageStatus(chatId: string): Promise<ImageStatusResponse> {
-  try {
-    const headers = await getAuthHeaders()
-    
-    // Add additional headers to help with CORS
-    const corsHeaders = {
-      ...headers,
-      'Access-Control-Request-Method': 'GET',
-      'Access-Control-Request-Headers': 'authorization,content-type'
-    }
-    
-    console.log(`🖼️ Fetching image status for ${chatId}`)
-    
-    const response = await fetch(`${API_BASE_URL}/api/images/status/${chatId}`, {
-      method: 'GET',
-      headers: corsHeaders,
-      // Add these options to help with CORS
-      mode: 'cors',
-      credentials: 'include'
-    })
-
-    console.log(`🖼️ Image status response: ${response.status}`)
-
-    if (!response.ok) {
-      // Better error handling for CORS issues
-      if (response.status === 0 || response.type === 'opaque') {
-        throw new Error('CORS_ERROR')
-      }
+    try {
+      const headers = await getAuthHeaders()
       
-      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
-      throw new Error(errorData.detail || 'Failed to get image status')
-    }
+      const response = await fetch(`${API_BASE_URL}/api/images/status/${chatId}`, {
+        method: 'GET',
+        headers
+      })
 
-    const result = await response.json()
-    console.log(`🖼️ Image status result:`, result)
-    return result
-  } catch (error) {
-    console.error('AdventureService.getImageStatus error:', error)
-    
-    // If it's a CORS error, return pending status instead of failing
-    if (error.message === 'CORS_ERROR' || error.message.includes('CORS')) {
-      console.warn('🖼️ CORS error detected, returning pending status')
-      return {
-        world_status: 'pending',
-        character_status: 'pending'
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(errorData.detail || 'Failed to get image status')
       }
+
+      return await response.json()
+    } catch (error) {
+      console.error('AdventureService.getImageStatus error:', error)
+      throw error
     }
-    
-    throw error
   }
-}
 
   static async regenerateImages(chatId: string): Promise<{ success: boolean; message: string }> {
     try {
@@ -503,64 +472,38 @@ export class AdventureService {
 
   // Utility method to poll image status until ready or failed
   static async waitForImages(
-  chatId: string, 
-  maxWaitMs: number = 300000, // 5 minutes
-  pollIntervalMs: number = 10000 // Increased to 10 seconds
-): Promise<ImageStatusResponse> {
-  const startTime = Date.now()
-  let consecutiveErrors = 0
-  const maxConsecutiveErrors = 3
-  
-  console.log(`🖼️ Starting to wait for images: ${chatId}`)
-  
-  while (Date.now() - startTime < maxWaitMs) {
-    try {
-      // Add delay before first poll to avoid immediate CORS issues
-      if (Date.now() - startTime < 5000) {
-        console.log(`🖼️ Initial delay for ${chatId}, waiting...`)
-        await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
-        continue
-      }
-      
-      const status = await this.getImageStatus(chatId)
-      consecutiveErrors = 0 // Reset error counter on success
-      
-      console.log(`🖼️ Polling ${chatId}: world=${status.world_status}, character=${status.character_status}`)
-      
-      // Check if both images are complete (ready or failed)
-      const worldComplete = status.world_status === 'ready' || status.world_status === 'failed'
-      const characterComplete = status.character_status === 'ready' || status.character_status === 'failed'
-      
-      if (worldComplete && characterComplete) {
-        console.log(`🖼️ Images complete for ${chatId}`)
-        return status
-      }
-      
-      // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
-      
-    } catch (error) {
-      consecutiveErrors++
-      console.error(`🖼️ Error polling image status (${consecutiveErrors}/${maxConsecutiveErrors}):`, error)
-      
-      // If too many consecutive errors, fail gracefully
-      if (consecutiveErrors >= maxConsecutiveErrors) {
-        console.error(`🖼️ Too many consecutive errors for ${chatId}, giving up`)
-        return {
-          world_status: 'failed',
-          character_status: 'failed'
+    chatId: string, 
+    maxWaitMs: number = 300000, // 5 minutes
+    pollIntervalMs: number = 5000 // 5 seconds
+  ): Promise<ImageStatusResponse> {
+    const startTime = Date.now()
+    
+    while (Date.now() - startTime < maxWaitMs) {
+      try {
+        const status = await this.getImageStatus(chatId)
+        
+        // Check if both images are complete (ready or failed)
+        const worldComplete = status.world_status === 'ready' || status.world_status === 'failed'
+        const characterComplete = status.character_status === 'ready' || status.character_status === 'failed'
+        
+        if (worldComplete && characterComplete) {
+          return status
         }
+        
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+        
+      } catch (error) {
+        console.error('Error polling image status:', error)
+        // Continue polling on error
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
       }
-      
-      // Wait longer after errors
-      await new Promise(resolve => setTimeout(resolve, pollIntervalMs * 2))
     }
+    
+    // Timeout reached
+    throw new Error('Image generation timeout')
   }
-  
-  // Timeout reached
-  console.warn(`🖼️ Image generation timeout for ${chatId}`)
-  throw new Error('Image generation timeout')
-}
+
   // FIXED: Utility method to get fresh image URLs with better caching
   static async getCachedImageUrl(
     chatId: string, 
