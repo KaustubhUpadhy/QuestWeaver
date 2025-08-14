@@ -506,36 +506,37 @@ export class AdventureService {
 
   // FIXED: Utility method to get fresh image URLs with better caching
   static async getCachedImageUrl(
-    chatId: string, 
-    imageType: 'world' | 'character', 
-    variant: 'master' | 'web' | 'thumb' | 'avatar' = 'web'
-  ): Promise<string | null> {
-    try {
-      console.log(`🔗 Fetching ${imageType} image URL for ${chatId} (${variant})`)
-      
-      // Check if we have a recent URL (less than 30 minutes old)
-      const cacheKey = `img_${chatId}_${imageType}_${variant}`
-      const cachedData = sessionStorage.getItem(cacheKey)
-      
-      if (cachedData) {
-        try {
-          const { url, timestamp } = JSON.parse(cachedData)
-          const age = Date.now() - timestamp
-          const thirtyMinutes = 30 * 60 * 1000
-          
-          if (age < thirtyMinutes) {
-            console.log(`🔗 Using cached ${imageType} URL (${Math.round(age/60000)}min old)`)
-            return url
-          } else {
-            console.log(`🔗 Cached ${imageType} URL expired, fetching fresh`)
-            sessionStorage.removeItem(cacheKey)
-          }
-        } catch (e) {
+  chatId: string, 
+  imageType: 'world' | 'character', 
+  variant: 'master' | 'web' | 'thumb' | 'avatar' = 'web'
+): Promise<string | null> {
+  try {
+    console.log(`🔗 Fetching ${imageType} image URL for ${chatId} (${variant})`)
+    
+    // Check if we have a recent URL (less than 30 minutes old)
+    const cacheKey = `img_${chatId}_${imageType}_${variant}`
+    const cachedData = sessionStorage.getItem(cacheKey)
+    
+    if (cachedData) {
+      try {
+        const { url, timestamp } = JSON.parse(cachedData)
+        const age = Date.now() - timestamp
+        const thirtyMinutes = 30 * 60 * 1000
+        
+        if (age < thirtyMinutes) {
+          console.log(`🔗 Using cached ${imageType} URL (${Math.round(age/60000)}min old)`)
+          return url
+        } else {
+          console.log(`🔗 Cached ${imageType} URL expired, fetching fresh`)
           sessionStorage.removeItem(cacheKey)
         }
+      } catch (e) {
+        sessionStorage.removeItem(cacheKey)
       }
-      
-      // Fetch fresh URL
+    }
+    
+    // Fetch fresh URL with enhanced error handling
+    try {
       const response = await this.getImageUrl(chatId, imageType, variant)
       
       console.log(`🔗 ${imageType} URL response:`, response)
@@ -554,100 +555,144 @@ export class AdventureService {
       
       console.warn(`🔗 Failed to get ${imageType} URL: success=${response.success}, url=${!!response.url}`)
       return null
-    } catch (error) {
-      console.error(`🔗 Error getting ${imageType} image URL:`, error)
-      return null
+      
+    } catch (fetchError: any) {
+      // ENHANCED ERROR HANDLING for CORS and network issues
+      if (fetchError.message.includes('CORS') || 
+          fetchError.message.includes('Failed to fetch') ||
+          fetchError.message.includes('NetworkError') ||
+          fetchError.message.includes('Access to fetch') ||
+          fetchError.name === 'TypeError') {
+        
+        console.warn(`🔗 CORS/Network error for ${imageType} image, will retry later:`, fetchError.message)
+        
+        // For CORS errors, don't throw - return null to allow retry
+        // This prevents breaking the entire image loading flow
+        return null
+      }
+      
+      // For other errors, check if it's a 404 or server error
+      if (fetchError.status === 404 || fetchError.status === 500) {
+        console.warn(`🔗 Server error ${fetchError.status} for ${imageType} image:`, fetchError.message)
+        return null
+      }
+      
+      // For unexpected errors, log and throw
+      console.error(`🔗 Unexpected error getting ${imageType} image URL:`, fetchError)
+      throw fetchError
     }
+    
+  } catch (error: any) {
+    console.error(`🔗 Critical error in getCachedImageUrl for ${imageType}:`, error)
+    
+    // Even for critical errors, return null instead of throwing
+    // This ensures the UI doesn't break and allows for retry mechanisms
+    return null
   }
+}
 
   // FIXED: Enhanced image loading with retry logic and forced refresh
   static async loadAdventureImagesWithRetry(
-    adventure: any, 
-    maxRetries: number = 3,
-    forceRefresh: boolean = false
-  ): Promise<any> {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`🖼️ Loading images for adventure ${adventure.sessionId} (attempt ${attempt})`)
-        
-        // Clear cache if forcing refresh
-        if (forceRefresh) {
-          const cacheKeys = [
-            `img_${adventure.sessionId}_world_web`,
-            `img_${adventure.sessionId}_character_avatar`
-          ]
-          cacheKeys.forEach(key => sessionStorage.removeItem(key))
-        }
-        
-        // Get image status first
-        const status = await this.getImageStatus(adventure.sessionId)
-        console.log(`🖼️ Image status for ${adventure.sessionId}:`, status)
-        
-        let worldImageUrl = adventure.worldImageUrl
-        let characterImageUrl = adventure.characterImageUrl
-
-        // Load world image if ready and not already loaded (or forcing refresh)
-        if (status.world_status === 'ready' && (!worldImageUrl || forceRefresh)) {
-          console.log(`🖼️ Attempting to load world image for ${adventure.sessionId}`)
-          const fetchedWorldUrl = await this.getCachedImageUrl(adventure.sessionId, 'world', 'web')
-          if (fetchedWorldUrl) {
-            worldImageUrl = fetchedWorldUrl
-            console.log(`🖼️ ✅ World image URL loaded successfully`)
-          } else {
-            console.log(`🖼️ ❌ Failed to get world image URL`)
-          }
-        }
-
-        // Load character image if ready and not already loaded (or forcing refresh)
-        if (status.character_status === 'ready' && (!characterImageUrl || forceRefresh)) {
-          console.log(`🖼️ Attempting to load character image for ${adventure.sessionId}`)
-          const fetchedCharacterUrl = await this.getCachedImageUrl(adventure.sessionId, 'character', 'avatar')
-          if (fetchedCharacterUrl) {
-            characterImageUrl = fetchedCharacterUrl
-            console.log(`🖼️ ✅ Character image URL loaded successfully`)
-          } else {
-            console.log(`🖼️ ❌ Failed to get character image URL`)
-          }
-        }
-
-        const result = {
-          ...adventure,
-          imageStatus: status,
-          worldImageUrl: worldImageUrl || undefined,
-          characterImageUrl: characterImageUrl || undefined,
-          isImagesLoading: status.world_status === 'pending' || status.character_status === 'pending',
-          imageLoadError: false
-        }
-        
-        console.log(`🖼️ Final result for ${adventure.sessionId}:`, {
-          worldUrl: !!result.worldImageUrl,
-          characterUrl: !!result.characterImageUrl,
-          isLoading: result.isImagesLoading,
-          worldUrlPreview: result.worldImageUrl ? result.worldImageUrl.substring(0, 50) + '...' : 'none',
-          characterUrlPreview: result.characterImageUrl ? result.characterImageUrl.substring(0, 50) + '...' : 'none'
-        })
-        
-        return result
-      } catch (error) {
-        console.error(`🖼️ Attempt ${attempt} failed for adventure ${adventure.sessionId}:`, error)
-        
-        if (attempt === maxRetries) {
-          // Mark as failed after all retries
-          console.error(`🖼️ All attempts failed for adventure ${adventure.sessionId}`)
-          return {
-            ...adventure,
-            imageLoadError: true,
-            isImagesLoading: false
-          }
-        }
-        
-        // Wait before retry (exponential backoff)
-        const delay = 1000 * Math.pow(2, attempt - 1)
-        console.log(`🖼️ Waiting ${delay}ms before retry...`)
-        await new Promise(resolve => setTimeout(resolve, delay))
+  adventure: any, 
+  maxRetries: number = 3,
+  forceRefresh: boolean = false
+): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🖼️ Loading images for adventure ${adventure.sessionId} (attempt ${attempt}/${maxRetries})`)
+      
+      // Clear cache if forcing refresh
+      if (forceRefresh) {
+        const cacheKeys = [
+          `img_${adventure.sessionId}_world_web`,
+          `img_${adventure.sessionId}_character_avatar`
+        ]
+        cacheKeys.forEach(key => sessionStorage.removeItem(key))
+        console.log(`🔄 Cleared cache for adventure ${adventure.sessionId}`)
       }
+      
+      // Get image status first with retry logic
+      let status
+      try {
+        status = await this.getImageStatus(adventure.sessionId)
+        console.log(`🖼️ Image status for ${adventure.sessionId}:`, status)
+      } catch (statusError: any) {
+        if (statusError.message.includes('CORS') || statusError.message.includes('Failed to fetch')) {
+          console.warn(`🖼️ CORS error getting status for ${adventure.sessionId}, attempt ${attempt}`)
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+            continue
+          }
+        }
+        throw statusError
+      }
+      
+      let worldImageUrl = adventure.worldImageUrl
+      let characterImageUrl = adventure.characterImageUrl
+
+      // Load world image if ready and not already loaded (or forcing refresh)
+      if (status.world_status === 'ready' && (!worldImageUrl || forceRefresh)) {
+        console.log(`🖼️ Attempting to load world image for ${adventure.sessionId}`)
+        const fetchedWorldUrl = await this.getCachedImageUrl(adventure.sessionId, 'world', 'web')
+        if (fetchedWorldUrl) {
+          worldImageUrl = fetchedWorldUrl
+          console.log(`🖼️ ✅ World image URL loaded successfully`)
+        } else {
+          console.log(`🖼️ ❌ Failed to get world image URL`)
+        }
+      }
+
+      // Load character image if ready and not already loaded (or forcing refresh)
+      if (status.character_status === 'ready' && (!characterImageUrl || forceRefresh)) {
+        console.log(`🖼️ Attempting to load character image for ${adventure.sessionId}`)
+        const fetchedCharacterUrl = await this.getCachedImageUrl(adventure.sessionId, 'character', 'avatar')
+        if (fetchedCharacterUrl) {
+          characterImageUrl = fetchedCharacterUrl
+          console.log(`🖼️ ✅ Character image URL loaded successfully`)
+        } else {
+          console.log(`🖼️ ❌ Failed to get character image URL`)
+        }
+      }
+
+      const result = {
+        ...adventure,
+        imageStatus: status,
+        worldImageUrl: worldImageUrl || undefined,
+        characterImageUrl: characterImageUrl || undefined,
+        isImagesLoading: status.world_status === 'pending' || status.character_status === 'pending',
+        imageLoadError: false
+      }
+      
+      console.log(`🖼️ Final result for ${adventure.sessionId}:`, {
+        worldUrl: !!result.worldImageUrl,
+        characterUrl: !!result.characterImageUrl,
+        isLoading: result.isImagesLoading,
+        worldStatus: status.world_status,
+        characterStatus: status.character_status
+      })
+      
+      return result
+      
+    } catch (error: any) {
+      console.error(`🖼️ Attempt ${attempt} failed for adventure ${adventure.sessionId}:`, error)
+      
+      if (attempt === maxRetries) {
+        // Mark as failed after all retries
+        console.error(`🖼️ All attempts failed for adventure ${adventure.sessionId}`)
+        return {
+          ...adventure,
+          imageLoadError: true,
+          isImagesLoading: false
+        }
+      }
+      
+      // Wait before retry with exponential backoff
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000) // Max 5 second delay
+      console.log(`🖼️ Waiting ${delay}ms before retry...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
     }
   }
+}
 
   // NEW: Force refresh images for a specific adventure
   static async forceRefreshAdventureImages(adventure: any): Promise<any> {
