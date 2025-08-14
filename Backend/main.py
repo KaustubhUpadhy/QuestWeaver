@@ -1008,32 +1008,42 @@ async def check_memory_health(memory_manager: MemoryManager = Depends(get_memory
 # Health check endpoint for Image system
 @app.get("/api/health/images")
 async def check_image_health():
-    """Health check for image generation system"""
+    """Lightweight health check for image generation system"""
     try:
-        # Test S3 connection
-        s3_client = image_generator.s3_client
-        s3_client.head_bucket(Bucket=image_generator.bucket)
-        
-        # Test HF API (just check if token is set)
-        if not image_generator.hf_token or image_generator.hf_token == "hf_xxx":
+        # FIXED: Don't touch external services during health check
+        # Just verify that the image generator is initialized
+        if not image_generator:
             return {
                 "status": "unhealthy",
                 "image_system": "error",
-                "message": "Hugging Face token not configured"
+                "message": "Image generator not initialized"
             }
         
-        return {
-            "status": "healthy",
-            "image_system": "connected",
-            "s3_bucket": image_generator.bucket,
-            "message": "Image generation system is operational"
-        }
+        # Quick checks without external calls
+        has_s3_config = bool(image_generator.s3_client and image_generator.bucket)
+        has_hf_token = bool(image_generator.hf_token and image_generator.hf_token != "hf_xxx")
+        
+        if has_s3_config and has_hf_token:
+            return {
+                "status": "healthy",
+                "image_system": "warm",
+                "s3_bucket": image_generator.bucket,
+                "message": "Image generation system ready (fast check)"
+            }
+        else:
+            return {
+                "status": "unhealthy", 
+                "image_system": "config_error",
+                "message": f"Missing config - S3: {has_s3_config}, HF: {has_hf_token}"
+            }
+            
     except Exception as e:
         return {
             "status": "unhealthy",
-            "image_system": "error",
+            "image_system": "error", 
             "message": f"Image system error: {str(e)}"
         }
+
 
 @app.get("/")
 async def root():
