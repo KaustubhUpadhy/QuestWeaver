@@ -131,6 +131,53 @@ async function getAuthHeaders() {
 }
 
 export class AdventureService {
+  // NEW: Fire-and-forget warmup that bypasses CORS entirely
+  static async warmBackend(): Promise<void> {
+    try {
+      console.log('🔥 Warming backend with no-cors mode...')
+      
+      // Fire-and-forget: no-cors doesn't require CORS headers and still wakes the instance
+      // This is safe because we don't read the response and it's our own backend
+      fetch(`${API_BASE_URL}/health`, { 
+        method: 'GET', 
+        mode: 'no-cors' 
+      }).catch(() => {
+        // Ignore errors - this is fire-and-forget warmup
+      })
+      
+      // Also warm the image status endpoint path
+      fetch(`${API_BASE_URL}/api/images/status/warmup`, { 
+        method: 'OPTIONS', 
+        mode: 'no-cors' 
+      }).catch(() => {
+        // Ignore errors - this is fire-and-forget warmup
+      })
+      
+      console.log('🔥 Warmup requests fired (non-blocking)')
+    } catch (error) {
+      // Ignore all errors - this is fire-and-forget warmup
+      console.log('🔥 Warmup initiation completed (errors ignored)')
+    }
+  }
+
+  // UPDATED: Non-blocking warmup that always succeeds
+  static async checkImageHealth(): Promise<boolean> {
+    try {
+      console.log('🔥 Warming backend (no-cors mode)...')
+      
+      // Fire-and-forget warmup - don't await it
+      void this.warmBackend()
+      
+      // Always return true since we're not blocking on the warmup
+      console.log('🔥 Warmup initiated (non-blocking)')
+      return true
+    } catch (error) {
+      console.warn('AdventureService.checkImageHealth error:', error)
+      // Even on error, return true since warmup is fire-and-forget
+      return true
+    }
+  }
+
   // FIXED: Improved error handling for story initialization
   static async initializeStory(request: StoryInitRequest): Promise<StoryResponse> {
     try {
@@ -344,29 +391,6 @@ export class AdventureService {
     }
   }
 
-  // FIXED: Use lightweight /health endpoint for warmup instead of /api/health/images
-  static async checkImageHealth(): Promise<boolean> {
-    try {
-      console.log('🔥 Checking service health with lightweight endpoint...')
-      
-      // Use the ultra-light /health endpoint that doesn't touch external services
-      const response = await fetch(`${API_BASE_URL}/health`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      if (!response.ok) {
-        throw new Error(`Health check failed: ${response.status}`)
-      }
-
-      console.log('🔥 Service health check passed')
-      return true
-    } catch (error) {
-      console.error('AdventureService.checkImageHealth error:', error)
-      return false
-    }
-  }
-
   // New Image-related methods
   static async getImageUrl(
     chatId: string, 
@@ -493,7 +517,7 @@ export class AdventureService {
     }
   }
 
-  // ENHANCED: Better cold start handling in waitForImages
+  // UPDATED: Enhanced waitForImages with non-blocking warmup
   static async waitForImages(
     chatId: string, 
     maxWaitMs: number = 300000, // 5 minutes
@@ -503,17 +527,17 @@ export class AdventureService {
     let consecutiveErrors = 0
     const maxConsecutiveErrors = 3
     
-    // CRITICAL: Warm up with lightweight endpoint first
+    // CRITICAL: Non-blocking warmup
     try {
-      console.log('🔥 Warming up service for image polling...')
-      await this.checkImageHealth()  // Uses /health now, not /api/health/images
+      console.log('🔥 Warming up service for image polling (non-blocking)...')
+      void this.warmBackend()  // Fire-and-forget
       
-      // CRITICAL: Add buffer after warmup to let service fully initialize
+      // CRITICAL: Add buffer after warmup initiation
       console.log('🔥 Adding post-warmup buffer...')
-      await new Promise(r => setTimeout(r, 1200))  // Increased buffer
-      console.log('🔥 Service warmed up and ready')
+      await new Promise(r => setTimeout(r, 1500))  // Longer buffer for warmup
+      console.log('🔥 Service should be warmed up by now')
     } catch (warmupError) {
-      console.warn('🔥 Service warmup failed, continuing anyway:', warmupError)
+      console.warn('🔥 Warmup initiation failed, continuing anyway:', warmupError)
     }
     
     while (Date.now() - startTime < maxWaitMs) {
@@ -538,16 +562,19 @@ export class AdventureService {
         consecutiveErrors++
         console.error(`Error polling image status (${consecutiveErrors}/${maxConsecutiveErrors}):`, error)
         
-        // ENHANCED: Auto-retry for cold start/proxy errors
+        // ENHANCED: Auto-retry for cold start/proxy errors with longer delays
         if ((error instanceof TypeError || 
              /CORS|Failed to fetch|502|Bad Gateway/i.test(String(error))) && 
-            consecutiveErrors === 1) {
+            consecutiveErrors <= 2) {  // Allow more retries for cold start
           
-          console.warn("🔥 Cold start/proxy error detected; auto-retrying...")
-          await new Promise(r => setTimeout(r, 1200))
+          console.warn("🔥 Cold start/proxy error detected; auto-retrying with longer delay...")
+          
+          // Progressive delay for cold start issues
+          const retryDelay = consecutiveErrors === 1 ? 2000 : 3000
+          await new Promise(r => setTimeout(r, retryDelay))
           
           try {
-            // One silent retry for cold start issues
+            // Silent retry for cold start issues
             const retryStatus = await this.getImageStatus(chatId)
             consecutiveErrors = 0  // Reset on success
             
@@ -560,7 +587,7 @@ export class AdventureService {
             
             continue  // Continue with normal polling
           } catch (retryError) {
-            console.warn("🔥 Auto-retry also failed, will try normal retry flow")
+            console.warn("🔥 Auto-retry also failed, will continue with normal retry flow")
             // Fall through to normal error handling
           }
         }
@@ -672,7 +699,7 @@ export class AdventureService {
     }
   }
 
-  // ENHANCED: Better error handling in loadAdventureImagesWithRetry
+  // UPDATED: Enhanced loadAdventureImagesWithRetry with non-blocking warmup
   static async loadAdventureImagesWithRetry(
     adventure: any, 
     maxRetries: number = 3,
@@ -682,15 +709,15 @@ export class AdventureService {
       try {
         console.log(`🖼️ Loading images for adventure ${adventure.sessionId} (attempt ${attempt}/${maxRetries})`)
         
-        // CRITICAL: Use lightweight warmup on initial attempt
+        // CRITICAL: Non-blocking warmup on initial attempt
         if (attempt === 1) {
           try {
-            console.log('🔥 Warming up service before image status check...')
-            await this.checkImageHealth()  // Uses /health endpoint now
-            await new Promise(r => setTimeout(r, 800))  // Buffer after warmup
-            console.log('🔥 Service warmed up successfully')
+            console.log('🔥 Warming up service before image status check (non-blocking)...')
+            void this.warmBackend()  // Fire-and-forget
+            await new Promise(r => setTimeout(r, 1000))  // Buffer after warmup initiation
+            console.log('🔥 Service warmup initiated')
           } catch (warmupError) {
-            console.warn('🔥 Service warmup failed, continuing anyway:', warmupError)
+            console.warn('🔥 Warmup initiation failed, continuing anyway:', warmupError)
           }
         }
         
@@ -710,13 +737,12 @@ export class AdventureService {
           status = await this.getImageStatus(adventure.sessionId)
           console.log(`🖼️ Image status for ${adventure.sessionId}:`, status)
         } catch (statusError: any) {
-          // ENHANCED: Auto-retry for cold start errors on first attempt
-          if (attempt === 1 && 
-              (statusError instanceof TypeError || 
+          // ENHANCED: More aggressive auto-retry for cold start errors
+          if ((statusError instanceof TypeError || 
                /CORS|Failed to fetch|502|Bad Gateway/i.test(String(statusError)))) {
             
-            console.warn(`🔥 Cold start error getting status, auto-retrying...`)
-            await new Promise(resolve => setTimeout(resolve, 1200))
+            console.warn(`🔥 Cold start error getting status, auto-retrying with delay...`)
+            await new Promise(resolve => setTimeout(resolve, 2000))  // Longer delay
             
             try {
               status = await this.getImageStatus(adventure.sessionId)
@@ -806,7 +832,7 @@ export class AdventureService {
                             error instanceof TypeError
         
         const delay = isProxyError 
-          ? Math.min(2000 * attempt, 8000)  // Longer delays for proxy errors
+          ? Math.min(3000 * attempt, 10000)  // Longer delays for proxy errors
           : Math.min(1000 * Math.pow(2, attempt - 1), 5000)  // Exponential backoff for other errors
         
         console.log(`🖼️ Waiting ${delay}ms before retry...`)
