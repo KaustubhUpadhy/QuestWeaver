@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://questweaver-819u.onrender.com/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://questweaver-819u.onrender.com/health"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
