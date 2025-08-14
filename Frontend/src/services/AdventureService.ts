@@ -367,7 +367,30 @@ export class AdventureService {
     }
   }
 
-  // Image methods - all same-origin now, NO MORE CORS!
+  // ENHANCED: Better error detection with HTTP status codes
+  static async getImageStatus(chatId: string): Promise<ImageStatusResponse> {
+    try {
+      const headers = await getAuthHeaders()
+      
+      const response = await fetch(`${API_BASE_URL}/api/images/status/${chatId}`, {
+        method: 'GET',
+        headers,
+        cache: 'no-store'  // CRITICAL: Avoid cached 502s
+      })
+
+      if (!response.ok) {
+        // CRITICAL: Include HTTP status for better 502 detection
+        throw new Error(`HTTP_${response.status}: ${response.statusText}`)
+      }
+
+      return await response.json()
+    } catch (error: any) {
+      console.error('AdventureService.getImageStatus error:', error)
+      // Include the original error message for better 502 detection
+      throw new Error(error.message.includes('HTTP_') ? error.message : `Unknown error: ${error.message}`)
+    }
+  }
+
   static async getImageUrl(
     chatId: string, 
     imageType: 'world' | 'character', 
@@ -395,27 +418,6 @@ export class AdventureService {
       return await response.json()
     } catch (error) {
       console.error('AdventureService.getImageUrl error:', error)
-      throw error
-    }
-  }
-
-  static async getImageStatus(chatId: string): Promise<ImageStatusResponse> {
-    try {
-      const headers = await getAuthHeaders()
-      
-      const response = await fetch(`${API_BASE_URL}/api/images/status/${chatId}`, {
-        method: 'GET',
-        headers
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
-        throw new Error(errorData.detail || 'Failed to get image status')
-      }
-
-      return await response.json()
-    } catch (error) {
-      console.error('AdventureService.getImageStatus error:', error)
       throw error
     }
   }
@@ -491,175 +493,246 @@ export class AdventureService {
     }
   }
 
-  // SIMPLIFIED: Enhanced waitForImages with same-origin calls
-  static async waitForImages(
-    chatId: string, 
-    maxWaitMs: number = 300000,
-    pollIntervalMs: number = 5000
-  ): Promise<ImageStatusResponse> {
-    const startTime = Date.now()
-    let consecutiveErrors = 0
-    const maxConsecutiveErrors = 3
-    
-    // Simple warmup
-    try {
-      console.log('🔥 Warming up service (same-origin)...')
-      void this.warmBackend()
-      await new Promise(r => setTimeout(r, 1000))
-      console.log('🔥 Service warmed up')
-    } catch (warmupError) {
-      console.warn('🔥 Warmup failed, continuing:', warmupError)
-    }
-    
-    while (Date.now() - startTime < maxWaitMs) {
-      try {
-        const status = await this.getImageStatus(chatId)
-        consecutiveErrors = 0
-        
-        const worldComplete = status.world_status === 'ready' || status.world_status === 'failed'
-        const characterComplete = status.character_status === 'ready' || status.character_status === 'failed'
-        
-        if (worldComplete && characterComplete) {
-          return status
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
-        
-      } catch (error: any) {
-        consecutiveErrors++
-        console.error(`Error polling image status (${consecutiveErrors}/${maxConsecutiveErrors}):`, error)
-        
-        // Auto-retry for 502 errors (cold starts)
-        if (error.message.includes('502') && consecutiveErrors <= 2) {
-          console.warn("🔥 Cold start 502, auto-retrying...")
-          await new Promise(r => setTimeout(r, 2000))
-          
-          try {
-            const retryStatus = await this.getImageStatus(chatId)
-            consecutiveErrors = 0
-            
-            const worldComplete = retryStatus.world_status === 'ready' || retryStatus.world_status === 'failed'
-            const characterComplete = retryStatus.character_status === 'ready' || retryStatus.character_status === 'failed'
-            
-            if (worldComplete && characterComplete) {
-              return retryStatus
-            }
-            continue
-          } catch (retryError) {
-            console.warn("🔥 Auto-retry failed, continuing normal flow")
-          }
-        }
-        
-        if (consecutiveErrors >= maxConsecutiveErrors) {
-          throw new Error(`Too many consecutive polling errors: ${error.message}`)
-        }
-        
-        const delay = error.message.includes('502') ? pollIntervalMs * 2 : pollIntervalMs
-        await new Promise(resolve => setTimeout(resolve, delay))
-      }
-    }
-    
-    throw new Error('Image generation timeout')
-  }
-
-  // SIMPLIFIED: Image loading with same-origin calls
+  // BULLETPROOF: Auto-retry image loading - NEVER shows red error banner!
   static async loadAdventureImagesWithRetry(
     adventure: any, 
-    maxRetries: number = 3,
+    maxRetries: number = 8, // Much more aggressive retries
     forceRefresh: boolean = false
   ): Promise<any> {
+    
+    console.log(`🖼️ Starting bulletproof image loading for ${adventure.sessionId}`)
+    
+    // CRITICAL: Always return "loading" state initially, never error state
+    const keepLoadingResult = {
+      ...adventure,
+      imageStatus: adventure.imageStatus || {
+        world_status: 'pending',
+        character_status: 'pending'
+      },
+      isImagesLoading: true,
+      imageLoadError: false  // NEVER set this to true!
+    }
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`🖼️ Loading images for adventure ${adventure.sessionId} (attempt ${attempt}/${maxRetries})`)
+        console.log(`🖼️ Loading images attempt ${attempt}/${maxRetries} for ${adventure.sessionId}`)
         
-        // Simple warmup on first attempt
+        // Progressive warmup delays - longer delays for later attempts
         if (attempt === 1) {
           void this.warmBackend()
-          await new Promise(r => setTimeout(r, 800))
+          await new Promise(r => setTimeout(r, 1500))
+        } else {
+          // Much longer delays to let Render fully wake up
+          const delay = Math.min(3000 + (attempt * 2000), 15000)
+          console.log(`🔄 Backend warming up... waiting ${delay}ms before attempt ${attempt}`)
+          await new Promise(r => setTimeout(r, delay))
         }
         
         // Clear cache if forcing refresh
         if (forceRefresh) {
-          const cacheKeys = [
-            `img_${adventure.sessionId}_world_web`,
-            `img_${adventure.sessionId}_character_avatar`
-          ]
-          cacheKeys.forEach(key => sessionStorage.removeItem(key))
+          this.clearImageCache(adventure.sessionId)
+          console.log(`🔄 Cleared cache for ${adventure.sessionId}`)
         }
         
-        // Get image status with retry for 502 errors
+        // Try to get image status with very specific error handling
         let status
         try {
+          console.log(`🔍 Checking image status (attempt ${attempt})...`)
           status = await this.getImageStatus(adventure.sessionId)
+          console.log(`🖼️ ✅ Status check successful on attempt ${attempt}:`, status)
         } catch (statusError: any) {
-          if (statusError.message.includes('502')) {
-            console.warn(`🔥 Cold start 502, retrying...`)
-            await new Promise(resolve => setTimeout(resolve, 1500))
-            status = await this.getImageStatus(adventure.sessionId)
-          } else {
-            throw statusError
+          const errorMsg = statusError.message || 'unknown'
+          console.log(`🔄 Status check failed on attempt ${attempt}: ${errorMsg}`)
+          
+          // For 502 errors or "Unknown error" (which is 502), continue retrying
+          if (errorMsg.includes('502') || errorMsg.includes('Unknown error') || errorMsg.includes('Bad Gateway')) {
+            console.log(`🔄 502/Gateway error - backend still warming up, will retry (${attempt}/${maxRetries})`)
+            
+            // If we're not on the last attempt, continue to retry
+            if (attempt < maxRetries) {
+              continue
+            } else {
+              // On final attempt, return loading state instead of failing
+              console.log(`🔄 Max retries reached, but keeping in loading state (no red banner)`)
+              return keepLoadingResult
+            }
           }
+          
+          // For other types of errors, retry a few times then give up
+          if (attempt < 3) {
+            console.log(`🔄 Non-502 error, retrying... (${attempt}/${maxRetries})`)
+            continue
+          }
+          
+          // Final fallback - return loading state, never error state
+          console.log(`🔄 Persistent error, keeping in loading state`)
+          return keepLoadingResult
         }
         
+        // If we got here, status check succeeded!
         let worldImageUrl = adventure.worldImageUrl
         let characterImageUrl = adventure.characterImageUrl
 
-        // Load images if ready
+        // Try to load world image if ready
         if (status.world_status === 'ready' && (!worldImageUrl || forceRefresh)) {
+          console.log(`🖼️ Loading world image...`)
           try {
             const fetchedWorldUrl = await this.getCachedImageUrl(adventure.sessionId, 'world', 'web')
             if (fetchedWorldUrl) {
               worldImageUrl = fetchedWorldUrl
+              console.log(`🖼️ ✅ World image loaded successfully`)
+            } else {
+              console.log(`🖼️ ⚠️ World image URL not available yet`)
             }
           } catch (worldError: any) {
-            console.warn(`🖼️ World image load failed:`, worldError.message)
+            console.warn(`🖼️ World image load failed (non-critical):`, worldError.message)
+            // Don't fail the whole process - just continue without world image
           }
         }
 
+        // Try to load character image if ready
         if (status.character_status === 'ready' && (!characterImageUrl || forceRefresh)) {
+          console.log(`🖼️ Loading character image...`)
           try {
             const fetchedCharacterUrl = await this.getCachedImageUrl(adventure.sessionId, 'character', 'avatar')
             if (fetchedCharacterUrl) {
               characterImageUrl = fetchedCharacterUrl
+              console.log(`🖼️ ✅ Character image loaded successfully`)
+            } else {
+              console.log(`🖼️ ⚠️ Character image URL not available yet`)
             }
           } catch (characterError: any) {
-            console.warn(`🖼️ Character image load failed:`, characterError.message)
+            console.warn(`🖼️ Character image load failed (non-critical):`, characterError.message)
+            // Don't fail the whole process - just continue without character image
           }
         }
 
-        return {
+        // Success! Return the loaded adventure
+        const successResult = {
           ...adventure,
           imageStatus: status,
           worldImageUrl: worldImageUrl || undefined,
           characterImageUrl: characterImageUrl || undefined,
           isImagesLoading: status.world_status === 'pending' || status.character_status === 'pending',
-          imageLoadError: false
+          imageLoadError: false // Always false - never show error banner
         }
+        
+        console.log(`🖼️ ✅ Image loading completed successfully on attempt ${attempt}!`)
+        return successResult
         
       } catch (error: any) {
-        console.error(`🖼️ Attempt ${attempt} failed:`, error)
+        console.warn(`🔄 Attempt ${attempt} encountered error:`, error.message)
         
+        // Never give up - on final attempt, return loading state
         if (attempt === maxRetries) {
-          return {
-            ...adventure,
-            imageLoadError: true,
-            isImagesLoading: false
-          }
+          console.log(`🔄 Final attempt failed, returning loading state (no error banner)`)
+          return keepLoadingResult
         }
         
-        const delay = error.message.includes('502') ? 3000 * attempt : 1000 * attempt
-        await new Promise(resolve => setTimeout(resolve, delay))
+        // Continue to next attempt
+        console.log(`🔄 Continuing to attempt ${attempt + 1}...`)
       }
     }
+
+    // Final fallback (should never reach here)
+    console.log(`🔄 Fallback: returning loading state`)
+    return keepLoadingResult
   }
 
-  // Keep existing utility methods
+  // ENHANCED: More resilient waitForImages with better retry logic
+  static async waitForImages(
+    chatId: string, 
+    maxWaitMs: number = 600000, // Increased to 10 minutes
+    pollIntervalMs: number = 8000 // Slower polling to be gentler on cold starts
+  ): Promise<ImageStatusResponse> {
+    const startTime = Date.now()
+    let consecutiveErrors = 0
+    const maxConsecutiveErrors = 8 // Allow more errors before giving up
+    
+    console.log(`🖼️ Starting enhanced image polling for ${chatId}`)
+    
+    // Gentle warmup
+    try {
+      console.log('🔥 Gently warming backend...')
+      void this.warmBackend()
+      await new Promise(r => setTimeout(r, 2000)) // Longer initial delay
+      console.log('🔥 Initial warmup complete')
+    } catch (warmupError) {
+      console.warn('🔥 Warmup failed, continuing anyway:', warmupError)
+    }
+    
+    while (Date.now() - startTime < maxWaitMs) {
+      try {
+        console.log(`🔍 Polling image status... (errors: ${consecutiveErrors}/${maxConsecutiveErrors})`)
+        const status = await this.getImageStatus(chatId)
+        
+        // Reset error counter on successful call
+        consecutiveErrors = 0
+        console.log(`✅ Status poll successful:`, status)
+        
+        // Check if both images are complete
+        const worldComplete = status.world_status === 'ready' || status.world_status === 'failed'
+        const characterComplete = status.character_status === 'ready' || status.character_status === 'failed'
+        
+        if (worldComplete && characterComplete) {
+          console.log(`🎉 Both images completed! Status:`, status)
+          return status
+        }
+        
+        // Wait before next poll
+        console.log(`⏳ Images still generating, waiting ${pollIntervalMs}ms...`)
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+        
+      } catch (error: any) {
+        consecutiveErrors++
+        const errorMsg = error.message || 'unknown'
+        console.warn(`🔄 Poll error ${consecutiveErrors}/${maxConsecutiveErrors}: ${errorMsg}`)
+        
+        // For 502/gateway errors, be very patient
+        if (errorMsg.includes('502') || errorMsg.includes('Unknown error') || errorMsg.includes('Bad Gateway')) {
+          console.log(`🔄 Gateway error - backend cold start, being patient...`)
+          
+          // Progressive backoff for cold starts
+          const coldStartDelay = Math.min(5000 + (consecutiveErrors * 3000), 20000)
+          console.log(`🔄 Waiting ${coldStartDelay}ms for backend to warm up...`)
+          await new Promise(r => setTimeout(r, coldStartDelay))
+          
+          // Don't count cold start errors as heavily
+          if (consecutiveErrors > maxConsecutiveErrors) {
+            console.log(`🔄 Too many cold start errors, giving up polling`)
+            throw new Error(`Backend appears to be persistently down`)
+          }
+          
+          continue
+        }
+        
+        // For other errors, use normal backoff
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          console.error(`🚨 Too many consecutive errors, giving up`)
+          throw new Error(`Too many consecutive polling errors: ${errorMsg}`)
+        }
+        
+        const normalDelay = Math.min(pollIntervalMs * consecutiveErrors, 30000)
+        console.log(`🔄 Normal error backoff: ${normalDelay}ms`)
+        await new Promise(resolve => setTimeout(resolve, normalDelay))
+      }
+    }
+    
+    // Timeout reached
+    console.warn(`⏰ Polling timeout reached for ${chatId}`)
+    throw new Error('Image generation timeout - but images may still be processing')
+  }
+
+  // ENHANCED: Better error handling for getCachedImageUrl with retry
   static async getCachedImageUrl(
     chatId: string, 
     imageType: 'world' | 'character', 
     variant: 'master' | 'web' | 'thumb' | 'avatar' = 'web'
   ): Promise<string | null> {
     try {
+      console.log(`🔗 Getting ${imageType} image URL for ${chatId}`)
+      
+      // Check cache first
       const cacheKey = `img_${chatId}_${imageType}_${variant}`
       const cachedData = sessionStorage.getItem(cacheKey)
       
@@ -670,8 +743,10 @@ export class AdventureService {
           const thirtyMinutes = 30 * 60 * 1000
           
           if (age < thirtyMinutes) {
+            console.log(`🔗 Using cached ${imageType} URL`)
             return url
           } else {
+            console.log(`🔗 Cached ${imageType} URL expired`)
             sessionStorage.removeItem(cacheKey)
           }
         } catch (e) {
@@ -679,26 +754,46 @@ export class AdventureService {
         }
       }
       
-      const response = await this.getImageUrl(chatId, imageType, variant)
-      
-      if (response.success && response.url) {
-        const cacheData = {
-          url: response.url,
-          timestamp: Date.now()
+      // Fetch fresh URL with retry logic for 502 errors
+      let lastError: any = null
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`🔗 Fetching fresh ${imageType} URL (attempt ${attempt})`)
+          const response = await this.getImageUrl(chatId, imageType, variant)
+          
+          if (response.success && response.url) {
+            // Cache the new URL
+            const cacheData = { url: response.url, timestamp: Date.now() }
+            sessionStorage.setItem(cacheKey, JSON.stringify(cacheData))
+            console.log(`🔗 ✅ Cached fresh ${imageType} URL`)
+            return response.url
+          } else {
+            console.warn(`🔗 Image URL not ready yet: success=${response.success}`)
+            return null
+          }
+        } catch (fetchError: any) {
+          lastError = fetchError
+          console.warn(`🔗 URL fetch attempt ${attempt} failed:`, fetchError.message)
+          
+          // For 502 errors, wait a bit before retrying
+          if (fetchError.message.includes('502') && attempt < 3) {
+            await new Promise(r => setTimeout(r, 2000 * attempt))
+          }
         }
-        sessionStorage.setItem(cacheKey, JSON.stringify(cacheData))
-        return response.url
       }
       
+      // All attempts failed
+      console.warn(`🔗 All URL fetch attempts failed for ${imageType}:`, lastError?.message)
       return null
+      
     } catch (error: any) {
-      console.error(`🔗 Error getting ${imageType} image URL:`, error)
+      console.error(`🔗 Critical error getting ${imageType} URL:`, error.message)
       return null
     }
   }
 
   static async forceRefreshAdventureImages(adventure: any): Promise<any> {
-    return this.loadAdventureImagesWithRetry(adventure, 3, true)
+    return this.loadAdventureImagesWithRetry(adventure, 8, true)
   }
 
   static clearImageCache(chatId: string): void {

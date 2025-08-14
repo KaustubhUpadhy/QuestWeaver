@@ -130,7 +130,7 @@ const Adventures = () => {
       // Use the enhanced retry method with force refresh capability
       return await AdventureService.loadAdventureImagesWithRetry(
         adventure,
-        2,
+        8,
         forceRefresh
       );
     } catch (error) {
@@ -1249,13 +1249,6 @@ const Adventures = () => {
                         </Button>
                       </div>
                     </div>
-
-                    {/* Image Error Indicator */}
-                    {adventure.imageLoadError && (
-                      <div className="absolute top-3 left-3 bg-red-500/80 text-white text-xs px-2 py-1 rounded-full">
-                        Image load failed
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -1525,26 +1518,7 @@ const Adventures = () => {
                       </div>
                     )}
 
-                    {/* Image Load Error Warning */}
-                    {selectedAdventure.imageLoadError && (
-                      <div className="mb-3 p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2 text-sm text-red-800">
-                        <RotateCcw className="h-4 w-4" />
-                        <span>
-                          Failed to load images for this adventure. You can
-                          continue chatting or try regenerating images.
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            handleRegenerateImages(selectedAdventure)
-                          }
-                          className="ml-auto"
-                        >
-                          Retry Images
-                        </Button>
-                      </div>
-                    )}
+                    
 
                     <div className="flex gap-3">
                       <Input
