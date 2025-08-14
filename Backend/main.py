@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import Response
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import uuid
@@ -122,7 +122,10 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600  # Cache preflight for 1 hour
 )
-
+@app.options("/{path:path}")
+async def handle_preflight(path: str):
+    """Handle OPTIONS requests during cold starts"""
+    return Response(status_code=204)
 
 # Security
 security = HTTPBearer()
