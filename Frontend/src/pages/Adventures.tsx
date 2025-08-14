@@ -1,677 +1,859 @@
-import { useState, useEffect, useRef } from 'react'
-import { useLocation, useSearchParams } from 'react-router-dom'
-import { MessageSquare, Plus, Search, Trash2, RefreshCw, User, Image as ImageIcon, Loader2, RotateCcw } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
-import { useAuth } from '@/components/AuthContext'
-import { AdventureService } from '@/services/AdventureService'
-import AuthModal from '@/components/AuthModal'
-import AdventureSetupModal from '@/components/AdventureSetupModal'
-import DeleteConfirmationModal from '@/components/DeleteConfirmationModal'
-import MarkdownRenderer from '@/components/MarkdownRenderer'
-import Header from '@/components/Header'
-import ImageZoomModal from '@/components/ImageZoomModal'
+import { useState, useEffect, useRef } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import {
+  MessageSquare,
+  Plus,
+  Search,
+  Trash2,
+  RefreshCw,
+  User,
+  Image as ImageIcon,
+  Loader2,
+  RotateCcw,
+} from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { useAuth } from "@/components/AuthContext";
+import { AdventureService } from "@/services/AdventureService";
+import AuthModal from "@/components/AuthModal";
+import AdventureSetupModal from "@/components/AdventureSetupModal";
+import DeleteConfirmationModal from "@/components/DeleteConfirmationModal";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
+import Header from "@/components/Header";
+import ImageZoomModal from "@/components/ImageZoomModal";
 
 interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: string
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
 }
 
 interface ImageStatus {
-  world_status: 'pending' | 'ready' | 'failed'
-  character_status: 'pending' | 'ready' | 'failed'
-  world_updated_at?: string
-  character_updated_at?: string
+  world_status: "pending" | "ready" | "failed";
+  character_status: "pending" | "ready" | "failed";
+  world_updated_at?: string;
+  character_updated_at?: string;
 }
 
 interface Adventure {
-  sessionId: string
-  title: string
-  lastMessage: string
-  timestamp: string
-  messageCount: number
-  messages: Message[]
-  isLoaded: boolean
-  worldImageUrl?: string
-  characterImageUrl?: string
-  imageStatus?: ImageStatus
-  isImagesLoading?: boolean
-  imageLoadError?: boolean
+  sessionId: string;
+  title: string;
+  lastMessage: string;
+  timestamp: string;
+  messageCount: number;
+  messages: Message[];
+  isLoaded: boolean;
+  worldImageUrl?: string;
+  characterImageUrl?: string;
+  imageStatus?: ImageStatus;
+  isImagesLoading?: boolean;
+  imageLoadError?: boolean;
 }
 
 const Adventures = () => {
-  const [adventures, setAdventures] = useState<Adventure[]>([])
-  const [selectedAdventure, setSelectedAdventure] = useState<Adventure | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [messages, setMessages] = useState<{ [sessionId: string]: string }>({})
-  const [showAuthModal, setShowAuthModal] = useState(false)
-  const [showAdventureModal, setShowAdventureModal] = useState(false)
-  const [loadingMessages, setLoadingMessages] = useState<Set<string>>(new Set())
-  const [isLoadingAdventures, setIsLoadingAdventures] = useState(true)
-  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [adventureToDelete, setAdventureToDelete] = useState<Adventure | null>(null)
-  const [isDeletingAdventure, setIsDeletingAdventure] = useState(false)
-  const [imageGenerationEnabled, setImageGenerationEnabled] = useState(false)
-  const [showImageZoom, setShowImageZoom] = useState(false)
-  const [zoomedImage, setZoomedImage] = useState<{url: string; title: string; type: 'character' | 'world'} | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  
-  const { isAuthenticated, isLoading } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [adventures, setAdventures] = useState<Adventure[]>([]);
+  const [selectedAdventure, setSelectedAdventure] = useState<Adventure | null>(
+    null
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [messages, setMessages] = useState<{ [sessionId: string]: string }>({});
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showAdventureModal, setShowAdventureModal] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState<Set<string>>(
+    new Set()
+  );
+  const [isLoadingAdventures, setIsLoadingAdventures] = useState(true);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [adventureToDelete, setAdventureToDelete] = useState<Adventure | null>(
+    null
+  );
+  const [isDeletingAdventure, setIsDeletingAdventure] = useState(false);
+  const [imageGenerationEnabled, setImageGenerationEnabled] = useState(false);
+  const [showImageZoom, setShowImageZoom] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState<{
+    url: string;
+    title: string;
+    type: "character" | "world";
+  } | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { isAuthenticated, isLoading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Get current message for selected adventure
-  const currentMessage = selectedAdventure ? (messages[selectedAdventure.sessionId] || '') : ''
-  
+  const currentMessage = selectedAdventure
+    ? messages[selectedAdventure.sessionId] || ""
+    : "";
+
   // Check if current adventure is loading or waiting for images
-  const isCurrentChatLoading = selectedAdventure ? loadingMessages.has(selectedAdventure.sessionId) : false
-  const isWaitingForImages = selectedAdventure?.isImagesLoading || false
-  
+  const isCurrentChatLoading = selectedAdventure
+    ? loadingMessages.has(selectedAdventure.sessionId)
+    : false;
+  const isWaitingForImages = selectedAdventure?.isImagesLoading || false;
+
   // Disable send button if loading messages or waiting for images on new adventures
-  const isSendDisabled = isCurrentChatLoading || isWaitingForImages || isLoadingConversation
+  const isSendDisabled =
+    isCurrentChatLoading || isWaitingForImages || isLoadingConversation;
 
   // Helper function to update message for specific chat
   const updateMessageForChat = (sessionId: string, message: string) => {
-    setMessages(prev => ({
+    setMessages((prev) => ({
       ...prev,
-      [sessionId]: message
-    }))
-  }
+      [sessionId]: message,
+    }));
+  };
 
   // Helper function to set loading state for specific chat
   const setLoadingForChat = (sessionId: string, loading: boolean) => {
-    setLoadingMessages(prev => {
-      const newSet = new Set(prev)
+    setLoadingMessages((prev) => {
+      const newSet = new Set(prev);
       if (loading) {
-        newSet.add(sessionId)
+        newSet.add(sessionId);
       } else {
-        newSet.delete(sessionId)
+        newSet.delete(sessionId);
       }
-      return newSet
-    })
-  }
+      return newSet;
+    });
+  };
 
   // FIXED: Helper function to update adventure image URLs with force refresh option
-  const updateAdventureImages = async (adventure: Adventure, forceRefresh: boolean = false): Promise<Adventure> => {
-    if (!imageGenerationEnabled) return adventure
+  const updateAdventureImages = async (
+    adventure: Adventure,
+    forceRefresh: boolean = false
+  ): Promise<Adventure> => {
+    if (!imageGenerationEnabled) return adventure;
 
     try {
       // Use the enhanced retry method with force refresh capability
-      return await AdventureService.loadAdventureImagesWithRetry(adventure, 2, forceRefresh)
+      return await AdventureService.loadAdventureImagesWithRetry(
+        adventure,
+        2,
+        forceRefresh
+      );
     } catch (error) {
-      console.error('Failed to update adventure images:', error)
+      console.error("Failed to update adventure images:", error);
       return {
         ...adventure,
-        imageLoadError: true
-      }
+        imageLoadError: true,
+      };
     }
-  }
+  };
 
   // Helper function to extract title from story content
   const extractTitle = (content: string): string => {
-    const titleMatch = content.match(/\*\*Title:\s*([^*]+)\*\*/i)
+    const titleMatch = content.match(/\*\*Title:\s*([^*]+)\*\*/i);
     if (titleMatch) {
-      return titleMatch[1].trim()
+      return titleMatch[1].trim();
     }
-    
-    const boldMatch = content.match(/^\*\*([^*]+)\*\*/)
+
+    const boldMatch = content.match(/^\*\*([^*]+)\*\*/);
     if (boldMatch) {
-      return boldMatch[1].trim()
+      return boldMatch[1].trim();
     }
-    
-    const firstLine = content.split('\n')[0].replace(/\*\*/g, '').trim()
-    return firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine
-  }
+
+    const firstLine = content.split("\n")[0].replace(/\*\*/g, "").trim();
+    return firstLine.length > 50
+      ? firstLine.substring(0, 50) + "..."
+      : firstLine;
+  };
 
   // Helper function to extract preview text
   const extractPreview = (content: string): string => {
-    const lines = content.split('\n').filter(line => line.trim())
-    const contentWithoutTitle = lines.slice(1).join(' ')
-    return contentWithoutTitle.length > 80 
-      ? contentWithoutTitle.substring(0, 80) + '...'
-      : contentWithoutTitle
-  }
+    const lines = content.split("\n").filter((line) => line.trim());
+    const contentWithoutTitle = lines.slice(1).join(" ");
+    return contentWithoutTitle.length > 80
+      ? contentWithoutTitle.substring(0, 80) + "..."
+      : contentWithoutTitle;
+  };
 
   // Helper function to format relative time
   const formatRelativeTime = (timestamp: string): string => {
-    const now = new Date()
-    const messageDate = new Date(timestamp)
-    const diffInMs = now.getTime() - messageDate.getTime()
-    
-    const minutes = Math.floor(diffInMs / (1000 * 60))
-    const hours = Math.floor(diffInMs / (1000 * 60 * 60))
-    const days = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
-    
+    const now = new Date();
+    const messageDate = new Date(timestamp);
+    const diffInMs = now.getTime() - messageDate.getTime();
+
+    const minutes = Math.floor(diffInMs / (1000 * 60));
+    const hours = Math.floor(diffInMs / (1000 * 60 * 60));
+    const days = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
     if (minutes < 1) {
-      return 'Just now'
+      return "Just now";
     } else if (minutes < 60) {
-      return `${minutes} min${minutes !== 1 ? 's' : ''} ago`
+      return `${minutes} min${minutes !== 1 ? "s" : ""} ago`;
     } else if (hours < 24) {
-      return `${hours} hour${hours !== 1 ? 's' : ''} ago`
+      return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
     } else if (days < 7) {
-      return `${days} day${days !== 1 ? 's' : ''} ago`
+      return `${days} day${days !== 1 ? "s" : ""} ago`;
     } else {
       // More than a week ago, show actual date
-      return messageDate.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        year: messageDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-      })
+      return messageDate.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year:
+          messageDate.getFullYear() !== now.getFullYear()
+            ? "numeric"
+            : undefined,
+      });
     }
-  }
+  };
 
   // Check image generation system availability
   const checkImageSystemHealth = async () => {
     try {
-      const isEnabled = await AdventureService.isImageGenerationEnabled()
-      console.log('🖼️ Health check result:', isEnabled)
-      
+      const isEnabled = await AdventureService.isImageGenerationEnabled();
+      console.log("🖼️ Health check result:", isEnabled);
+
       // FIXED: Always enable for now since we know the APIs work
       // The health check fails due to S3 permissions but presigned URLs work fine
-      setImageGenerationEnabled(true)
-      console.log('🖼️ Image generation enabled: true (bypassing faulty health check)')
-      
+      setImageGenerationEnabled(true);
+      console.log(
+        "🖼️ Image generation enabled: true (bypassing faulty health check)"
+      );
     } catch (error) {
-      console.error('Failed to check image system health:', error)
+      console.error("Failed to check image system health:", error);
       // Enable anyway since we know the image APIs work
-      setImageGenerationEnabled(true)
-      console.log('🖼️ Image generation enabled: true (enabled despite health check error)')
+      setImageGenerationEnabled(true);
+      console.log(
+        "🖼️ Image generation enabled: true (enabled despite health check error)"
+      );
     }
-  }
+  };
 
   // FIXED: Load user's adventures from database with improved image loading
   const loadAdventures = async () => {
-    if (!isAuthenticated) return
-    
-    setIsLoadingAdventures(true)
+    if (!isAuthenticated) return;
+
+    setIsLoadingAdventures(true);
     try {
-      console.log('🏰 Loading user adventures from database...')
-      const response = await AdventureService.getUserSessions()
-      
+      console.log("🏰 Loading user adventures from database...");
+      const response = await AdventureService.getUserSessions();
+
       // Create base adventures
-      const baseAdventures: Adventure[] = response.sessions.map(session => ({
+      const baseAdventures: Adventure[] = response.sessions.map((session) => ({
         sessionId: session.session_id,
         title: session.title,
-        lastMessage: session.last_message_preview || extractPreview(session.title),
+        lastMessage:
+          session.last_message_preview || extractPreview(session.title),
         timestamp: session.last_updated || session.created_at,
         messageCount: session.message_count,
         messages: [],
         isLoaded: false,
         imageStatus: {
-          world_status: session.world_image_status || 'pending',
-          character_status: session.character_image_status || 'pending'
+          world_status: session.world_image_status || "pending",
+          character_status: session.character_image_status || "pending",
         },
-        isImagesLoading: (session.world_image_status === 'pending' || session.character_image_status === 'pending'),
-        imageLoadError: false
-      }))
+        isImagesLoading:
+          session.world_image_status === "pending" ||
+          session.character_image_status === "pending",
+        imageLoadError: false,
+      }));
 
-      console.log(`🏰 Loaded ${baseAdventures.length} adventures from database`)
+      console.log(
+        `🏰 Loaded ${baseAdventures.length} adventures from database`
+      );
 
       // Load images for each adventure if image generation is enabled
       if (imageGenerationEnabled) {
-        console.log('🖼️ Loading images for adventures...')
-        
+        console.log("🖼️ Loading images for adventures...");
+
         // Process adventures in smaller batches to avoid overwhelming the API
-        const batchSize = 3
-        const adventuresWithImages: Adventure[] = []
-        
+        const batchSize = 3;
+        const adventuresWithImages: Adventure[] = [];
+
         for (let i = 0; i < baseAdventures.length; i += batchSize) {
-          const batch = baseAdventures.slice(i, i + batchSize)
-          
+          const batch = baseAdventures.slice(i, i + batchSize);
+
           try {
             const batchResults = await Promise.allSettled(
               batch.map(async (adventure) => {
                 try {
-                  return await AdventureService.loadAdventureImagesWithRetry(adventure, 2)
+                  return await AdventureService.loadAdventureImagesWithRetry(
+                    adventure,
+                    2
+                  );
                 } catch (error) {
-                  console.error(`Failed to load images for adventure ${adventure.sessionId}:`, error)
+                  console.error(
+                    `Failed to load images for adventure ${adventure.sessionId}:`,
+                    error
+                  );
                   return {
                     ...adventure,
-                    imageLoadError: true
-                  }
+                    imageLoadError: true,
+                  };
                 }
               })
-            )
-            
+            );
+
             // Process batch results
             batchResults.forEach((result, index) => {
-              if (result.status === 'fulfilled') {
-                adventuresWithImages.push(result.value)
+              if (result.status === "fulfilled") {
+                adventuresWithImages.push(result.value);
               } else {
-                console.error(`Failed to process adventure in batch:`, result.reason)
+                console.error(
+                  `Failed to process adventure in batch:`,
+                  result.reason
+                );
                 adventuresWithImages.push({
                   ...batch[index],
-                  imageLoadError: true
-                })
+                  imageLoadError: true,
+                });
               }
-            })
-            
+            });
+
             // Update state after each batch for progressive loading
-            setAdventures([...adventuresWithImages])
-            
+            setAdventures([...adventuresWithImages]);
           } catch (error) {
-            console.error(`Failed to process batch starting at index ${i}:`, error)
+            console.error(
+              `Failed to process batch starting at index ${i}:`,
+              error
+            );
             // Add adventures without images if batch fails
-            adventuresWithImages.push(...batch.map(adv => ({ ...adv, imageLoadError: true })))
+            adventuresWithImages.push(
+              ...batch.map((adv) => ({ ...adv, imageLoadError: true }))
+            );
           }
         }
-        
-        console.log(`🖼️ Loaded images for ${adventuresWithImages.length} adventures`)
+
+        console.log(
+          `🖼️ Loaded images for ${adventuresWithImages.length} adventures`
+        );
       } else {
         // No image generation, just set base adventures
-        setAdventures(baseAdventures)
+        setAdventures(baseAdventures);
       }
-      
     } catch (error) {
-      console.error('Failed to load adventures:', error)
-      alert('Failed to load your adventures. Please refresh the page.')
+      console.error("Failed to load adventures:", error);
+      alert("Failed to load your adventures. Please refresh the page.");
     } finally {
-      setIsLoadingAdventures(false)
+      setIsLoadingAdventures(false);
     }
-  }
+  };
 
   // Load full conversation for a specific adventure
   const loadConversation = async (adventure: Adventure) => {
-    if (adventure.isLoaded) return adventure
+    if (adventure.isLoaded) return adventure;
 
-    setIsLoadingConversation(true)
+    setIsLoadingConversation(true);
     try {
-      console.log(`Loading conversation history for adventure: ${adventure.title}`)
-      const response = await AdventureService.getSessionHistory(adventure.sessionId)
-      
-      console.log(`Loaded ${response.messages.length} messages for adventure`)
-      
+      console.log(
+        `Loading conversation history for adventure: ${adventure.title}`
+      );
+      const response = await AdventureService.getSessionHistory(
+        adventure.sessionId
+      );
+
+      console.log(`Loaded ${response.messages.length} messages for adventure`);
+
       const updatedAdventure: Adventure = {
         ...adventure,
         messages: response.messages,
-        isLoaded: true
-      }
-      
+        isLoaded: true,
+      };
+
       // Update the adventure in the list
-      setAdventures(prev => prev.map(adv => 
-        adv.sessionId === adventure.sessionId ? updatedAdventure : adv
-      ))
-      
-      return updatedAdventure
+      setAdventures((prev) =>
+        prev.map((adv) =>
+          adv.sessionId === adventure.sessionId ? updatedAdventure : adv
+        )
+      );
+
+      return updatedAdventure;
     } catch (error) {
-      console.error('Failed to load conversation:', error)
-      alert('Failed to load conversation history. Please try again.')
-      return adventure
+      console.error("Failed to load conversation:", error);
+      alert("Failed to load conversation history. Please try again.");
+      return adventure;
     } finally {
-      setIsLoadingConversation(false)
+      setIsLoadingConversation(false);
     }
-  }
+  };
 
   // Wait for images to be generated for new adventures
   const waitForNewAdventureImages = async (sessionId: string) => {
-    if (!imageGenerationEnabled) return
+    if (!imageGenerationEnabled) return;
 
     try {
-      console.log(`Waiting for images to be generated for session: ${sessionId}`)
-      
-      // Set loading state
-      setAdventures(prev => prev.map(adv => 
-        adv.sessionId === sessionId ? { ...adv, isImagesLoading: true } : adv
-      ))
+      console.log(
+        `Waiting for images to be generated for session: ${sessionId}`
+      );
 
-      // Wait for images with a 5-minute timeout
-      const status = await AdventureService.waitForImages(sessionId, 300000, 5000)
-      
-      console.log('Image generation completed:', status)
-      
+      // Set loading state with better messaging
+      setAdventures((prev) =>
+        prev.map((adv) =>
+          adv.sessionId === sessionId
+            ? {
+                ...adv,
+                isImagesLoading: true,
+                imageLoadError: false, // Clear any previous errors
+              }
+            : adv
+        )
+      );
+
+      // CRITICAL: Add warmup and initial delay for cold start protection
+      try {
+        console.log("🔥 Warming up image service...");
+        await AdventureService.checkImageHealth();
+        await new Promise((r) => setTimeout(r, 1500)); // Longer initial delay for new chats
+        console.log("🔥 Image service warmed up");
+      } catch (warmupError) {
+        console.warn("🔥 Image service warmup failed:", warmupError);
+        // Continue anyway - warmup is best effort
+      }
+
+      // Wait for images with enhanced timeout and polling
+      const status = await AdventureService.waitForImages(
+        sessionId,
+        300000,
+        8000
+      ); // Slower polling for new chats
+
+      console.log("Image generation completed:", status);
+
       // Find the adventure and update it
-      setAdventures(prev => {
-        return prev.map(adv => {
+      setAdventures((prev) => {
+        return prev.map((adv) => {
           if (adv.sessionId === sessionId) {
-            return { 
-              ...adv, 
-              imageStatus: status, 
-              isImagesLoading: false 
-            }
+            return {
+              ...adv,
+              imageStatus: status,
+              isImagesLoading: false,
+              imageLoadError: false,
+            };
           }
-          return adv
-        })
-      })
+          return adv;
+        });
+      });
 
-      // Load images for the updated adventure
-      const adventureToUpdate = adventures.find(adv => adv.sessionId === sessionId)
+      // Load images for the updated adventure with retry logic
+      const adventureToUpdate = adventures.find(
+        (adv) => adv.sessionId === sessionId
+      );
       if (adventureToUpdate) {
         try {
+          // Add small delay before trying to load image URLs
+          await new Promise((r) => setTimeout(r, 1000));
+
           const updatedAdventure = await updateAdventureImages({
             ...adventureToUpdate,
             imageStatus: status,
-            isImagesLoading: false
-          })
+            isImagesLoading: false,
+          });
 
           // Update adventures with images
-          setAdventures(prev => prev.map(adv => 
-            adv.sessionId === sessionId ? updatedAdventure : adv
-          ))
+          setAdventures((prev) =>
+            prev.map((adv) =>
+              adv.sessionId === sessionId ? updatedAdventure : adv
+            )
+          );
 
           // Update selected adventure if it's the current one
           if (selectedAdventure?.sessionId === sessionId) {
-            setSelectedAdventure(updatedAdventure)
+            setSelectedAdventure(updatedAdventure);
           }
+
+          console.log("🎉 Images loaded successfully for new adventure!");
         } catch (error) {
-          console.error('Failed to load images after generation:', error)
+          console.error("Failed to load images after generation:", error);
+
+          // Mark as error but don't break the UI
+          setAdventures((prev) =>
+            prev.map((adv) =>
+              adv.sessionId === sessionId
+                ? {
+                    ...adv,
+                    imageLoadError: true,
+                    isImagesLoading: false,
+                  }
+                : adv
+            )
+          );
         }
       }
-      
     } catch (error) {
-      console.error('Error waiting for images:', error)
-      
-      // Remove loading state on error
-      setAdventures(prev => prev.map(adv => 
-        adv.sessionId === sessionId ? { ...adv, isImagesLoading: false } : adv
-      ))
+      console.error("Error waiting for images:", error);
+
+      // More graceful error handling - show retry option instead of just failing
+      setAdventures((prev) =>
+        prev.map((adv) =>
+          adv.sessionId === sessionId
+            ? {
+                ...adv,
+                isImagesLoading: false,
+                imageLoadError: true,
+              }
+            : adv
+        )
+      );
+
+      // Show user-friendly message
+      console.log(
+        "🔄 Image generation encountered issues. Images may load after a moment..."
+      );
     }
-  }
+  };
 
   // NEW: Force refresh images for selected adventure
   const refreshSelectedAdventureImages = async () => {
-    if (!selectedAdventure || !imageGenerationEnabled) return
+    if (!selectedAdventure || !imageGenerationEnabled) return;
 
     try {
-      console.log('🔄 Force refreshing selected adventure images')
-      
+      console.log("🔄 Force refreshing selected adventure images");
+
       // Clear cache first
-      AdventureService.clearImageCache(selectedAdventure.sessionId)
-      
-      const refreshedAdventure = await AdventureService.forceRefreshAdventureImages(selectedAdventure)
-      
+      AdventureService.clearImageCache(selectedAdventure.sessionId);
+
+      const refreshedAdventure =
+        await AdventureService.forceRefreshAdventureImages(selectedAdventure);
+
       // Update both selected adventure and adventures list
-      setSelectedAdventure(refreshedAdventure)
-      setAdventures(prev => prev.map(adv => 
-        adv.sessionId === selectedAdventure.sessionId ? refreshedAdventure : adv
-      ))
-      
-      console.log('🔄 Selected adventure images refreshed')
+      setSelectedAdventure(refreshedAdventure);
+      setAdventures((prev) =>
+        prev.map((adv) =>
+          adv.sessionId === selectedAdventure.sessionId
+            ? refreshedAdventure
+            : adv
+        )
+      );
+
+      console.log("🔄 Selected adventure images refreshed");
     } catch (error) {
-      console.error('🔄 Failed to refresh selected adventure images:', error)
+      console.error("🔄 Failed to refresh selected adventure images:", error);
     }
-  }
+  };
 
   // NEW: Force refresh images for any adventure
   const forceRefreshAdventureImages = async (sessionId: string) => {
-    console.log(`🔄 Force refreshing images for session: ${sessionId}`)
-    
+    console.log(`🔄 Force refreshing images for session: ${sessionId}`);
+
     try {
       // Clear cache first
-      AdventureService.clearImageCache(sessionId)
-      
+      AdventureService.clearImageCache(sessionId);
+
       // Find and update the adventure
-      const adventureToUpdate = adventures.find(adv => adv.sessionId === sessionId)
+      const adventureToUpdate = adventures.find(
+        (adv) => adv.sessionId === sessionId
+      );
       if (adventureToUpdate) {
-        const refreshedAdventure = await AdventureService.forceRefreshAdventureImages(adventureToUpdate)
-        
+        const refreshedAdventure =
+          await AdventureService.forceRefreshAdventureImages(adventureToUpdate);
+
         // Update adventures list
-        setAdventures(prev => prev.map(adv => 
-          adv.sessionId === sessionId ? refreshedAdventure : adv
-        ))
-        
+        setAdventures((prev) =>
+          prev.map((adv) =>
+            adv.sessionId === sessionId ? refreshedAdventure : adv
+          )
+        );
+
         // Update selected adventure if it matches
         if (selectedAdventure?.sessionId === sessionId) {
-          setSelectedAdventure(refreshedAdventure)
+          setSelectedAdventure(refreshedAdventure);
         }
-        
-        console.log('🔄 Force refresh completed')
+
+        console.log("🔄 Force refresh completed");
       }
     } catch (error) {
-      console.error('🔄 Force refresh failed:', error)
+      console.error("🔄 Force refresh failed:", error);
     }
-  }
+  };
 
-  const filteredAdventures = adventures.filter(adventure =>
+  const filteredAdventures = adventures.filter((adventure) =>
     adventure.title.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  );
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
     if (selectedAdventure && selectedAdventure.messages.length > 0) {
-      scrollToBottom()
+      scrollToBottom();
     }
-  }, [selectedAdventure?.messages.length])
+  }, [selectedAdventure?.messages.length]);
 
   // Initialize and load adventures
   useEffect(() => {
     if (isAuthenticated) {
-      checkImageSystemHealth()
+      checkImageSystemHealth();
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated]);
 
   // Separate effect for loading adventures after image system is checked
   useEffect(() => {
     if (isAuthenticated && imageGenerationEnabled !== undefined) {
-      loadAdventures()
+      loadAdventures();
     }
-  }, [isAuthenticated, imageGenerationEnabled])
+  }, [isAuthenticated, imageGenerationEnabled]);
 
   // FIXED: Improved image synchronization with better state management
   useEffect(() => {
-    if (!imageGenerationEnabled || !isAuthenticated || adventures.length === 0) return
+    if (!imageGenerationEnabled || !isAuthenticated || adventures.length === 0)
+      return;
 
     const updateImagesForPendingAdventures = async () => {
-      const adventuresNeedingUpdates = adventures.filter(adv => 
-        adv.isImagesLoading && !adv.imageLoadError
-      )
-      
-      if (adventuresNeedingUpdates.length === 0) return
+      const adventuresNeedingUpdates = adventures.filter(
+        (adv) => adv.isImagesLoading && !adv.imageLoadError
+      );
+
+      if (adventuresNeedingUpdates.length === 0) return;
 
       try {
-        console.log(`🖼️ Adventures: Updating images for ${adventuresNeedingUpdates.length} pending adventures`)
-        
+        console.log(
+          `🖼️ Adventures: Updating images for ${adventuresNeedingUpdates.length} pending adventures`
+        );
+
         const updatedAdventures = await Promise.allSettled(
           adventures.map(async (adventure) => {
             if (adventure.isImagesLoading && !adventure.imageLoadError) {
               try {
-                return await AdventureService.loadAdventureImagesWithRetry(adventure, 1)
+                return await AdventureService.loadAdventureImagesWithRetry(
+                  adventure,
+                  1
+                );
               } catch (error) {
-                console.error(`Failed to update images for adventure ${adventure.sessionId}:`, error)
+                console.error(
+                  `Failed to update images for adventure ${adventure.sessionId}:`,
+                  error
+                );
                 return {
                   ...adventure,
                   imageLoadError: true,
-                  isImagesLoading: false
-                }
+                  isImagesLoading: false,
+                };
               }
             }
-            return adventure
+            return adventure;
           })
-        )
+        );
 
         // Process results and update state
         const processedAdventures = updatedAdventures.map((result, index) => {
-          if (result.status === 'fulfilled') {
-            return result.value
+          if (result.status === "fulfilled") {
+            return result.value;
           } else {
-            console.error(`Failed to update adventure:`, result.reason)
+            console.error(`Failed to update adventure:`, result.reason);
             return {
               ...adventures[index],
               imageLoadError: true,
-              isImagesLoading: false
-            }
+              isImagesLoading: false,
+            };
           }
-        })
+        });
 
         // Check if there are actual changes before updating state
         const hasChanges = processedAdventures.some((updated, index) => {
-          const original = adventures[index]
-          return updated.worldImageUrl !== original.worldImageUrl ||
-                 updated.characterImageUrl !== original.characterImageUrl ||
-                 updated.isImagesLoading !== original.isImagesLoading ||
-                 updated.imageLoadError !== original.imageLoadError
-        })
+          const original = adventures[index];
+          return (
+            updated.worldImageUrl !== original.worldImageUrl ||
+            updated.characterImageUrl !== original.characterImageUrl ||
+            updated.isImagesLoading !== original.isImagesLoading ||
+            updated.imageLoadError !== original.imageLoadError
+          );
+        });
 
         if (hasChanges) {
-          console.log('🖼️ Adventures: Updating adventures with new image data')
-          setAdventures(processedAdventures)
-          
+          console.log("🖼️ Adventures: Updating adventures with new image data");
+          setAdventures(processedAdventures);
+
           // CRITICAL FIX: Synchronize selected adventure immediately
           if (selectedAdventure) {
-            const updatedSelected = processedAdventures.find(adv => adv.sessionId === selectedAdventure.sessionId)
-            if (updatedSelected && (
-              updatedSelected.worldImageUrl !== selectedAdventure.worldImageUrl ||
-              updatedSelected.characterImageUrl !== selectedAdventure.characterImageUrl ||
-              updatedSelected.isImagesLoading !== selectedAdventure.isImagesLoading ||
-              updatedSelected.imageLoadError !== selectedAdventure.imageLoadError
-            )) {
-              console.log('🖼️ Adventures: Syncing selected adventure with new images')
-              setSelectedAdventure(updatedSelected)
+            const updatedSelected = processedAdventures.find(
+              (adv) => adv.sessionId === selectedAdventure.sessionId
+            );
+            if (
+              updatedSelected &&
+              (updatedSelected.worldImageUrl !==
+                selectedAdventure.worldImageUrl ||
+                updatedSelected.characterImageUrl !==
+                  selectedAdventure.characterImageUrl ||
+                updatedSelected.isImagesLoading !==
+                  selectedAdventure.isImagesLoading ||
+                updatedSelected.imageLoadError !==
+                  selectedAdventure.imageLoadError)
+            ) {
+              console.log(
+                "🖼️ Adventures: Syncing selected adventure with new images"
+              );
+              setSelectedAdventure(updatedSelected);
             }
           }
         }
       } catch (error) {
-        console.error('Error updating pending images:', error)
+        console.error("Error updating pending images:", error);
       }
-    }
+    };
 
     // CRITICAL FIX: Immediate update when adventures change, then periodic updates
-    updateImagesForPendingAdventures()
+    updateImagesForPendingAdventures();
 
     // Update images every 10 seconds for pending adventures (more frequent)
-    const interval = setInterval(updateImagesForPendingAdventures, 10000)
-    return () => clearInterval(interval)
-  }, [adventures, imageGenerationEnabled, isAuthenticated, selectedAdventure?.sessionId])
+    const interval = setInterval(updateImagesForPendingAdventures, 10000);
+    return () => clearInterval(interval);
+  }, [
+    adventures,
+    imageGenerationEnabled,
+    isAuthenticated,
+    selectedAdventure?.sessionId,
+  ]);
 
   // Handle URL parameter for selecting specific adventure
   useEffect(() => {
-    const selectAdventureId = searchParams.get('select')
+    const selectAdventureId = searchParams.get("select");
     if (selectAdventureId && adventures.length > 0 && !selectedAdventure) {
-      const adventureToSelect = adventures.find(adv => adv.sessionId === selectAdventureId)
+      const adventureToSelect = adventures.find(
+        (adv) => adv.sessionId === selectAdventureId
+      );
       if (adventureToSelect) {
-        handleSelectAdventure(adventureToSelect)
-        setSearchParams(prev => {
-          const newParams = new URLSearchParams(prev)
-          newParams.delete('select')
-          return newParams
-        })
+        handleSelectAdventure(adventureToSelect);
+        setSearchParams((prev) => {
+          const newParams = new URLSearchParams(prev);
+          newParams.delete("select");
+          return newParams;
+        });
       }
     }
-  }, [adventures, searchParams, selectedAdventure])
+  }, [adventures, searchParams, selectedAdventure]);
 
   // Redirect unauthenticated users
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      setShowAuthModal(true)
+      setShowAuthModal(true);
     }
-  }, [isAuthenticated, isLoading])
+  }, [isAuthenticated, isLoading]);
 
   const handleSendMessage = async () => {
     if (!selectedAdventure || !currentMessage.trim() || isSendDisabled) {
-      return
+      return;
     }
 
-    const sessionId = selectedAdventure.sessionId
-    const userMessage = currentMessage.trim()
-    
-    setLoadingForChat(sessionId, true)
-    updateMessageForChat(sessionId, '')
+    const sessionId = selectedAdventure.sessionId;
+    const userMessage = currentMessage.trim();
+
+    setLoadingForChat(sessionId, true);
+    updateMessageForChat(sessionId, "");
 
     try {
       // Create user message object
       const userMessageObj: Message = {
         id: `user-${Date.now()}`,
-        role: 'user',
+        role: "user",
         content: userMessage,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      };
 
       // Optimistically update the UI
       const updatedAdventure = {
         ...selectedAdventure,
         messages: [...selectedAdventure.messages, userMessageObj],
-        lastMessage: userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage,
-        timestamp: new Date().toISOString()
-      }
+        lastMessage:
+          userMessage.length > 50
+            ? userMessage.substring(0, 50) + "..."
+            : userMessage,
+        timestamp: new Date().toISOString(),
+      };
 
-      setAdventures(prev => prev.map(adv => 
-        adv.sessionId === sessionId ? updatedAdventure : adv
-      ))
-      setSelectedAdventure(updatedAdventure)
+      setAdventures((prev) =>
+        prev.map((adv) =>
+          adv.sessionId === sessionId ? updatedAdventure : adv
+        )
+      );
+      setSelectedAdventure(updatedAdventure);
 
       // Send action to API
-      const response = await AdventureService.takeStoryAction(sessionId, userMessage)
+      const response = await AdventureService.takeStoryAction(
+        sessionId,
+        userMessage
+      );
 
       if (response.success) {
         // Create AI response message
         const aiMessageObj: Message = {
           id: `ai-${Date.now()}`,
-          role: 'assistant',
+          role: "assistant",
           content: response.story_content,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        };
 
         // Update with AI response
         const finalAdventure = {
           ...updatedAdventure,
           messages: [...updatedAdventure.messages, aiMessageObj],
-          lastMessage: response.story_content.length > 50 ? response.story_content.substring(0, 50) + '...' : response.story_content,
-          timestamp: new Date().toISOString()
-        }
+          lastMessage:
+            response.story_content.length > 50
+              ? response.story_content.substring(0, 50) + "..."
+              : response.story_content,
+          timestamp: new Date().toISOString(),
+        };
 
-        setAdventures(prev => prev.map(adv => 
-          adv.sessionId === sessionId ? finalAdventure : adv
-        ))
-        
-        setSelectedAdventure(current => 
+        setAdventures((prev) =>
+          prev.map((adv) =>
+            adv.sessionId === sessionId ? finalAdventure : adv
+          )
+        );
+
+        setSelectedAdventure((current) =>
           current?.sessionId === sessionId ? finalAdventure : current
-        )
+        );
       } else {
-        console.error('Failed to get AI response:', response.message)
+        console.error("Failed to get AI response:", response.message);
         // Revert optimistic update on error
-        setSelectedAdventure(selectedAdventure)
-        setAdventures(prev => prev.map(adv => 
-          adv.sessionId === sessionId ? selectedAdventure : adv
-        ))
+        setSelectedAdventure(selectedAdventure);
+        setAdventures((prev) =>
+          prev.map((adv) =>
+            adv.sessionId === sessionId ? selectedAdventure : adv
+          )
+        );
       }
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error("Error sending message:", error);
       // Revert optimistic update on error
-      setSelectedAdventure(selectedAdventure)
-      setAdventures(prev => prev.map(adv => 
-        adv.sessionId === sessionId ? selectedAdventure : adv
-      ))
+      setSelectedAdventure(selectedAdventure);
+      setAdventures((prev) =>
+        prev.map((adv) =>
+          adv.sessionId === sessionId ? selectedAdventure : adv
+        )
+      );
     } finally {
-      setLoadingForChat(sessionId, false)
+      setLoadingForChat(sessionId, false);
     }
-  }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isSendDisabled) {
-      e.preventDefault()
-      handleSendMessage()
+    if (e.key === "Enter" && !e.shiftKey && !isSendDisabled) {
+      e.preventDefault();
+      handleSendMessage();
     }
-  }
+  };
 
   const handleAuthSuccess = () => {
-    setShowAuthModal(false)
-    loadAdventures()
-  }
+    setShowAuthModal(false);
+    loadAdventures();
+  };
 
   const handleStartAdventure = () => {
-    setShowAdventureModal(true)
-  }
+    setShowAdventureModal(true);
+  };
 
-  const handleAdventureCreated = async (storyData: { sessionId: string; storyContent: string }) => {
-    console.log('Adventure created:', storyData)
-    
-    const title = extractTitle(storyData.storyContent)
-    const preview = extractPreview(storyData.storyContent)
-    
+  const handleAdventureCreated = async (storyData: {
+    sessionId: string;
+    storyContent: string;
+  }) => {
+    console.log("Adventure created:", storyData);
+
+    const title = extractTitle(storyData.storyContent);
+    const preview = extractPreview(storyData.storyContent);
+
     // Create initial AI message from the story content
     const initialMessage: Message = {
       id: `ai-${Date.now()}`,
-      role: 'assistant',
+      role: "assistant",
       content: storyData.storyContent,
-      timestamp: new Date().toISOString()
-    }
-    
+      timestamp: new Date().toISOString(),
+    };
+
     const newAdventure: Adventure = {
       sessionId: storyData.sessionId,
       title: title,
@@ -681,131 +863,146 @@ const Adventures = () => {
       messages: [initialMessage],
       isLoaded: true,
       imageStatus: {
-        world_status: 'pending',
-        character_status: 'pending'
+        world_status: "pending",
+        character_status: "pending",
       },
       isImagesLoading: imageGenerationEnabled, // Only show loading if images are enabled
-      imageLoadError: false
-    }
-    
-    setAdventures(prev => [newAdventure, ...prev])
-    setSelectedAdventure(newAdventure)
-    
+      imageLoadError: false,
+    };
+
+    setAdventures((prev) => [newAdventure, ...prev]);
+    setSelectedAdventure(newAdventure);
+
     // Start waiting for images if image generation is enabled
     if (imageGenerationEnabled) {
-      waitForNewAdventureImages(storyData.sessionId)
+      waitForNewAdventureImages(storyData.sessionId);
     }
-  }
+  };
 
   const handleSelectAdventure = async (adventure: Adventure) => {
-    console.log(`Selecting adventure: ${adventure.title} (${adventure.messageCount} messages)`)
-    setSelectedAdventure(adventure)
-    
+    console.log(
+      `Selecting adventure: ${adventure.title} (${adventure.messageCount} messages)`
+    );
+    setSelectedAdventure(adventure);
+
     // Load full conversation if not already loaded
     if (!adventure.isLoaded) {
-      console.log('Loading conversation history from database...')
-      const loadedAdventure = await loadConversation(adventure)
-      setSelectedAdventure(loadedAdventure)
+      console.log("Loading conversation history from database...");
+      const loadedAdventure = await loadConversation(adventure);
+      setSelectedAdventure(loadedAdventure);
     } else {
-      console.log('Using cached conversation history')
+      console.log("Using cached conversation history");
     }
-  }
+  };
 
-  const handleDeleteAdventure = async (adventure: Adventure, e?: React.MouseEvent) => {
+  const handleDeleteAdventure = async (
+    adventure: Adventure,
+    e?: React.MouseEvent
+  ) => {
     if (e) {
-      e.stopPropagation() // Prevent adventure selection when clicking from sidebar
+      e.stopPropagation(); // Prevent adventure selection when clicking from sidebar
     }
-    
+
     // Show confirmation modal
-    setAdventureToDelete(adventure)
-    setShowDeleteModal(true)
-  }
+    setAdventureToDelete(adventure);
+    setShowDeleteModal(true);
+  };
 
   const confirmDeleteAdventure = async () => {
-    if (!adventureToDelete) return
-    
-    setIsDeletingAdventure(true)
-    
+    if (!adventureToDelete) return;
+
+    setIsDeletingAdventure(true);
+
     try {
-      await AdventureService.deleteSession(adventureToDelete.sessionId)
-      
+      await AdventureService.deleteSession(adventureToDelete.sessionId);
+
       // Remove from local state
-      setAdventures(prev => prev.filter(adv => adv.sessionId !== adventureToDelete.sessionId))
-      
+      setAdventures((prev) =>
+        prev.filter((adv) => adv.sessionId !== adventureToDelete.sessionId)
+      );
+
       // If this was the selected adventure, clear selection
       if (selectedAdventure?.sessionId === adventureToDelete.sessionId) {
-        setSelectedAdventure(null)
+        setSelectedAdventure(null);
       }
-      
+
       // Close modal
-      setShowDeleteModal(false)
-      setAdventureToDelete(null)
+      setShowDeleteModal(false);
+      setAdventureToDelete(null);
     } catch (error) {
-      console.error('Failed to delete adventure:', error)
-      alert('Failed to delete adventure. Please try again.')
+      console.error("Failed to delete adventure:", error);
+      alert("Failed to delete adventure. Please try again.");
     } finally {
-      setIsDeletingAdventure(false)
+      setIsDeletingAdventure(false);
     }
-  }
+  };
 
   const cancelDeleteAdventure = () => {
-    setShowDeleteModal(false)
-    setAdventureToDelete(null)
-    setIsDeletingAdventure(false)
-  }
+    setShowDeleteModal(false);
+    setAdventureToDelete(null);
+    setIsDeletingAdventure(false);
+  };
 
-  const handleRegenerateImages = async (adventure: Adventure, e?: React.MouseEvent) => {
+  const handleRegenerateImages = async (
+    adventure: Adventure,
+    e?: React.MouseEvent
+  ) => {
     if (e) {
-      e.stopPropagation()
+      e.stopPropagation();
     }
-    
+
     if (!imageGenerationEnabled) {
-      alert('Image generation is not available')
-      return
+      alert("Image generation is not available");
+      return;
     }
 
     try {
-      await AdventureService.regenerateImages(adventure.sessionId)
-      
+      await AdventureService.regenerateImages(adventure.sessionId);
+
       // Update the adventure to show loading state
       const updatedAdventure = {
         ...adventure,
         isImagesLoading: true,
         imageStatus: {
-          world_status: 'pending' as const,
-          character_status: 'pending' as const
+          world_status: "pending" as const,
+          character_status: "pending" as const,
         },
-        imageLoadError: false
-      }
-      
-      setAdventures(prev => prev.map(adv => 
-        adv.sessionId === adventure.sessionId ? updatedAdventure : adv
-      ))
-      
-      if (selectedAdventure?.sessionId === adventure.sessionId) {
-        setSelectedAdventure(updatedAdventure)
-      }
-      
-      // Wait for new images
-      waitForNewAdventureImages(adventure.sessionId)
-      
-    } catch (error) {
-      console.error('Failed to regenerate images:', error)
-      alert('Failed to regenerate images. Please try again.')
-    }
-  }
+        imageLoadError: false,
+      };
 
-  const handleImageClick = (imageUrl: string | undefined, title: string, type: 'character' | 'world') => {
-    if (imageUrl) {
-      setZoomedImage({ url: imageUrl, title, type })
-      setShowImageZoom(true)
+      setAdventures((prev) =>
+        prev.map((adv) =>
+          adv.sessionId === adventure.sessionId ? updatedAdventure : adv
+        )
+      );
+
+      if (selectedAdventure?.sessionId === adventure.sessionId) {
+        setSelectedAdventure(updatedAdventure);
+      }
+
+      // Wait for new images
+      waitForNewAdventureImages(adventure.sessionId);
+    } catch (error) {
+      console.error("Failed to regenerate images:", error);
+      alert("Failed to regenerate images. Please try again.");
     }
-  }
+  };
+
+  const handleImageClick = (
+    imageUrl: string | undefined,
+    title: string,
+    type: "character" | "world"
+  ) => {
+    if (imageUrl) {
+      setZoomedImage({ url: imageUrl, title, type });
+      setShowImageZoom(true);
+    }
+  };
 
   const handleCloseImageZoom = () => {
-    setShowImageZoom(false)
-    setZoomedImage(null)
-  }
+    setShowImageZoom(false);
+    setZoomedImage(null);
+  };
 
   // Show loading while checking auth
   if (isLoading) {
@@ -819,7 +1016,7 @@ const Adventures = () => {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   // Show auth modal if not authenticated
@@ -833,10 +1030,11 @@ const Adventures = () => {
             <div className="space-y-2">
               <h2 className="text-2xl font-bold">Access Restricted</h2>
               <p className="text-muted-foreground max-w-md">
-                You need to create an account or sign in to access your adventures.
+                You need to create an account or sign in to access your
+                adventures.
               </p>
             </div>
-            <Button 
+            <Button
               onClick={() => setShowAuthModal(true)}
               className="gradient-primary shadow-glow"
             >
@@ -844,7 +1042,7 @@ const Adventures = () => {
             </Button>
           </div>
         </div>
-        
+
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
@@ -852,7 +1050,7 @@ const Adventures = () => {
           onAuthSuccess={handleAuthSuccess}
         />
       </div>
-    )
+    );
   }
 
   return (
@@ -863,21 +1061,27 @@ const Adventures = () => {
         <div className="w-80 border-r bg-card flex flex-col">
           <div className="p-4 space-y-4 border-b">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">Adventures</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                Adventures
+              </h2>
               <div className="flex items-center gap-1">
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={loadAdventures}
                   disabled={isLoadingAdventures}
                   title="Refresh adventures"
                   className="h-8 w-8 p-0"
                 >
-                  <RefreshCw className={`h-4 w-4 ${isLoadingAdventures ? 'animate-spin' : ''}`} />
+                  <RefreshCw
+                    className={`h-4 w-4 ${
+                      isLoadingAdventures ? "animate-spin" : ""
+                    }`}
+                  />
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={handleStartAdventure}
                   title="Start new adventure"
                   className="h-8 w-8 p-0"
@@ -886,7 +1090,7 @@ const Adventures = () => {
                 </Button>
               </div>
             </div>
-            
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -911,29 +1115,38 @@ const Adventures = () => {
                     onClick={() => handleSelectAdventure(adventure)}
                     className={`relative p-3 rounded-lg cursor-pointer transition-all group ${
                       selectedAdventure?.sessionId === adventure.sessionId
-                        ? 'bg-primary/20 border border-primary/30'
-                        : 'hover:bg-muted/20'
+                        ? "bg-primary/20 border border-primary/30"
+                        : "hover:bg-muted/20"
                     }`}
                   >
                     {/* World Background Image */}
                     {adventure.worldImageUrl && (
-                      <div 
+                      <div
                         className="absolute inset-0 rounded-lg bg-cover bg-center opacity-10 transition-opacity group-hover:opacity-20"
-                        style={{ backgroundImage: `url(${adventure.worldImageUrl})` }}
+                        style={{
+                          backgroundImage: `url(${adventure.worldImageUrl})`,
+                        }}
                       />
                     )}
-                    
+
                     <div className="relative z-10 flex items-start justify-between">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
                         {/* Character Avatar */}
                         <div className="flex-shrink-0 relative">
                           <Avatar className="h-10 w-10 ring-2 ring-border/50">
                             {adventure.characterImageUrl ? (
-                              <AvatarImage src={adventure.characterImageUrl} alt="Character" />
+                              <AvatarImage
+                                src={adventure.characterImageUrl}
+                                alt="Character"
+                              />
                             ) : (
-                              <AvatarFallback className={`${
-                                adventure.isImagesLoading ? 'bg-primary/10' : 'bg-muted'
-                              } text-muted-foreground relative`}>
+                              <AvatarFallback
+                                className={`${
+                                  adventure.isImagesLoading
+                                    ? "bg-primary/10"
+                                    : "bg-muted"
+                                } text-muted-foreground relative`}
+                              >
                                 {adventure.isImagesLoading ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
@@ -942,27 +1155,47 @@ const Adventures = () => {
                               </AvatarFallback>
                             )}
                           </Avatar>
-                          
+
                           {/* Image status indicator */}
                           {imageGenerationEnabled && adventure.imageStatus && (
                             <div className="absolute -bottom-1 -right-1">
                               {adventure.isImagesLoading ? (
-                                <div className="w-3 h-3 bg-yellow-500 rounded-full border border-background animate-pulse" 
-                                     title="Generating images..." />
+                                <div
+                                  className="w-3 h-3 bg-blue-500 rounded-full border border-background animate-pulse"
+                                  title="AI is generating images... This may take a moment on first load."
+                                />
                               ) : adventure.imageLoadError ? (
-                                <div className="w-3 h-3 bg-red-500 rounded-full border border-background" 
-                                     title="Image loading failed" />
-                              ) : adventure.imageStatus.character_status === 'ready' ? (
-                                <div className="w-3 h-3 bg-green-500 rounded-full border border-background" 
-                                     title="Images ready" />
-                              ) : adventure.imageStatus.character_status === 'failed' ? (
-                                <div className="w-3 h-3 bg-red-500 rounded-full border border-background" 
-                                     title="Image generation failed" />
+                                <div
+                                  className="w-3 h-3 bg-orange-500 rounded-full border border-background cursor-pointer"
+                                  title="Images are loading... Click to retry if needed."
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    forceRefreshAdventureImages(
+                                      adventure.sessionId
+                                    );
+                                  }}
+                                />
+                              ) : adventure.imageStatus.character_status ===
+                                "ready" ? (
+                                <div
+                                  className="w-3 h-3 bg-green-500 rounded-full border border-background"
+                                  title="Images ready"
+                                />
+                              ) : adventure.imageStatus.character_status ===
+                                "failed" ? (
+                                <div
+                                  className="w-3 h-3 bg-red-500 rounded-full border border-background cursor-pointer"
+                                  title="Image generation failed - click to retry"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRegenerateImages(adventure, e);
+                                  }}
+                                />
                               ) : null}
                             </div>
                           )}
                         </div>
-                        
+
                         {/* Adventure Details */}
                         <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-foreground text-sm truncate mb-1">
@@ -981,23 +1214,29 @@ const Adventures = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Action Buttons */}
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
                         {/* Regenerate Images Button */}
-                        {imageGenerationEnabled && adventure.imageStatus && 
-                         (adventure.imageStatus.world_status === 'failed' || adventure.imageStatus.character_status === 'failed' || adventure.imageLoadError) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 text-muted-foreground hover:text-blue-500"
-                            onClick={(e) => handleRegenerateImages(adventure, e)}
-                            title="Regenerate images"
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                          </Button>
-                        )}
-                        
+                        {imageGenerationEnabled &&
+                          adventure.imageStatus &&
+                          (adventure.imageStatus.world_status === "failed" ||
+                            adventure.imageStatus.character_status ===
+                              "failed" ||
+                            adventure.imageLoadError) && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-blue-500"
+                              onClick={(e) =>
+                                handleRegenerateImages(adventure, e)
+                              }
+                              title="Regenerate images"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                            </Button>
+                          )}
+
                         {/* Delete Button */}
                         <Button
                           size="sm"
@@ -1024,12 +1263,17 @@ const Adventures = () => {
               <div className="flex flex-col items-center justify-center h-64 text-center space-y-4 p-4">
                 <MessageSquare className="h-12 w-12 text-muted-foreground/50" />
                 <div className="space-y-2">
-                  <h3 className="font-medium text-muted-foreground">No Adventures Yet</h3>
+                  <h3 className="font-medium text-muted-foreground">
+                    No Adventures Yet
+                  </h3>
                   <p className="text-sm text-muted-foreground/70">
                     Start your first adventure to see your stories here
                   </p>
                 </div>
-                <Button className="gradient-primary" onClick={handleStartAdventure}>
+                <Button
+                  className="gradient-primary"
+                  onClick={handleStartAdventure}
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Begin New Adventure
                 </Button>
@@ -1044,12 +1288,14 @@ const Adventures = () => {
             <>
               {/* World Background Image */}
               {selectedAdventure.worldImageUrl && (
-                <div 
+                <div
                   className="absolute inset-0 bg-cover bg-center opacity-5"
-                  style={{ backgroundImage: `url(${selectedAdventure.worldImageUrl})` }}
+                  style={{
+                    backgroundImage: `url(${selectedAdventure.worldImageUrl})`,
+                  }}
                 />
               )}
-              
+
               <div className="relative z-10 flex flex-col h-full">
                 {/* Chat Header with Character Icon */}
                 <div className="p-4 border-b bg-card/95 backdrop-blur-sm">
@@ -1057,17 +1303,30 @@ const Adventures = () => {
                     <div className="flex items-center gap-3">
                       {/* Character Icon in Header */}
                       <div className="relative">
-                        <Avatar 
-                          className="h-12 w-12 ring-2 ring-primary/20 cursor-pointer hover:ring-primary/40 transition-all duration-200" 
-                          onClick={() => handleImageClick(selectedAdventure.characterImageUrl, selectedAdventure.title, 'character')}
+                        <Avatar
+                          className="h-12 w-12 ring-2 ring-primary/20 cursor-pointer hover:ring-primary/40 transition-all duration-200"
+                          onClick={() =>
+                            handleImageClick(
+                              selectedAdventure.characterImageUrl,
+                              selectedAdventure.title,
+                              "character"
+                            )
+                          }
                           title="Click to view character portrait"
                         >
                           {selectedAdventure.characterImageUrl ? (
-                            <AvatarImage src={selectedAdventure.characterImageUrl} alt="Character" />
+                            <AvatarImage
+                              src={selectedAdventure.characterImageUrl}
+                              alt="Character"
+                            />
                           ) : (
-                            <AvatarFallback className={`${
-                              selectedAdventure.isImagesLoading ? 'bg-primary/10' : 'bg-primary/10'
-                            } text-primary relative`}>
+                            <AvatarFallback
+                              className={`${
+                                selectedAdventure.isImagesLoading
+                                  ? "bg-primary/10"
+                                  : "bg-primary/10"
+                              } text-primary relative`}
+                            >
                               {selectedAdventure.isImagesLoading ? (
                                 <Loader2 className="h-5 w-5 animate-spin" />
                               ) : (
@@ -1076,22 +1335,26 @@ const Adventures = () => {
                             </AvatarFallback>
                           )}
                         </Avatar>
-                        
+
                         {/* Image generation status in header */}
                         {selectedAdventure.isImagesLoading && (
                           <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full border-2 border-background animate-pulse" />
                         )}
-                        
+
                         {selectedAdventure.imageLoadError && (
                           <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-background" />
                         )}
                       </div>
-                      
+
                       {/* Title and Subtitle */}
                       <div>
-                        <h1 className="text-xl font-semibold text-foreground">{selectedAdventure.title}</h1>
+                        <h1 className="text-xl font-semibold text-foreground">
+                          {selectedAdventure.title}
+                        </h1>
                         <div className="flex items-center gap-2">
-                          <p className="text-sm text-muted-foreground">Continue your adventure...</p>
+                          <p className="text-sm text-muted-foreground">
+                            Continue your adventure...
+                          </p>
                           {selectedAdventure.isImagesLoading && (
                             <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full flex items-center gap-1">
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -1107,39 +1370,48 @@ const Adventures = () => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                       {/* Manual Refresh Button */}
-                      {imageGenerationEnabled && (selectedAdventure.isImagesLoading || selectedAdventure.imageLoadError) && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={refreshSelectedAdventureImages}
-                          className="text-muted-foreground hover:text-primary transition-colors"
-                          title="Refresh images"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </Button>
-                      )}
-                      
+                      {imageGenerationEnabled &&
+                        (selectedAdventure.isImagesLoading ||
+                          selectedAdventure.imageLoadError) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={refreshSelectedAdventureImages}
+                            className="text-muted-foreground hover:text-primary transition-colors"
+                            title="Refresh images"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        )}
+
                       {/* Regenerate Images Button */}
-                      {imageGenerationEnabled && selectedAdventure.imageStatus && 
-                       (selectedAdventure.imageStatus.world_status === 'failed' || selectedAdventure.imageStatus.character_status === 'failed' || selectedAdventure.imageLoadError) && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleRegenerateImages(selectedAdventure)}
-                          className="text-muted-foreground hover:text-blue-500 transition-colors"
-                          title="Regenerate failed images"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </Button>
-                      )}
-                      
+                      {imageGenerationEnabled &&
+                        selectedAdventure.imageStatus &&
+                        (selectedAdventure.imageStatus.world_status ===
+                          "failed" ||
+                          selectedAdventure.imageStatus.character_status ===
+                            "failed" ||
+                          selectedAdventure.imageLoadError) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleRegenerateImages(selectedAdventure)
+                            }
+                            className="text-muted-foreground hover:text-blue-500 transition-colors"
+                            title="Regenerate failed images"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        )}
+
                       {/* Delete Button */}
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDeleteAdventure(selectedAdventure)}
                         className="text-muted-foreground hover:text-red-500 transition-colors"
                         title="Delete this adventure"
@@ -1156,7 +1428,9 @@ const Adventures = () => {
                     <div className="flex items-center justify-center h-full">
                       <div className="text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                        <p className="text-muted-foreground">Loading conversation...</p>
+                        <p className="text-muted-foreground">
+                          Loading conversation...
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -1164,7 +1438,7 @@ const Adventures = () => {
                       {/* Display conversation history */}
                       {selectedAdventure.messages.map((msg) => (
                         <div key={msg.id} className="flex gap-4">
-                          {msg.role === 'user' ? (
+                          {msg.role === "user" ? (
                             <>
                               <div className="flex-1" />
                               <div className="bg-primary text-primary-foreground p-4 rounded-2xl max-w-2xl shadow-sm">
@@ -1174,7 +1448,10 @@ const Adventures = () => {
                               </div>
                               <Avatar className="h-8 w-8 flex-shrink-0 mt-1 ring-2 ring-primary/20">
                                 {selectedAdventure.characterImageUrl ? (
-                                  <AvatarImage src={selectedAdventure.characterImageUrl} alt="Character" />
+                                  <AvatarImage
+                                    src={selectedAdventure.characterImageUrl}
+                                    alt="Character"
+                                  />
                                 ) : (
                                   <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
                                     You
@@ -1190,7 +1467,7 @@ const Adventures = () => {
                                 </AvatarFallback>
                               </Avatar>
                               <div className="bg-card/80 backdrop-blur-sm p-6 rounded-2xl flex-1 border border-border/30 shadow-sm">
-                                <MarkdownRenderer 
+                                <MarkdownRenderer
                                   content={msg.content}
                                   className="text-sm text-foreground leading-relaxed"
                                 />
@@ -1211,9 +1488,17 @@ const Adventures = () => {
                           <div className="bg-card/80 backdrop-blur-sm p-6 rounded-2xl flex-1 border border-border/30 shadow-sm">
                             <div className="flex items-center space-x-2 text-muted-foreground">
                               <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                              <span className="text-sm">Dungeon Master is thinking...</span>
+                              <div
+                                className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                                style={{ animationDelay: "0.1s" }}
+                              ></div>
+                              <div
+                                className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                                style={{ animationDelay: "0.2s" }}
+                              ></div>
+                              <span className="text-sm">
+                                Dungeon Master is thinking...
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1233,40 +1518,55 @@ const Adventures = () => {
                       <div className="mb-3 p-3 bg-yellow-100 border border-yellow-300 rounded-lg flex items-center gap-2 text-sm text-yellow-800">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         <span>
-                          Please wait while we generate images for your adventure. You can continue chatting once images are ready.
+                          Please wait while we generate images for your
+                          adventure. You can continue chatting once images are
+                          ready.
                         </span>
                       </div>
                     )}
-                    
+
                     {/* Image Load Error Warning */}
                     {selectedAdventure.imageLoadError && (
                       <div className="mb-3 p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2 text-sm text-red-800">
                         <RotateCcw className="h-4 w-4" />
                         <span>
-                          Failed to load images for this adventure. You can continue chatting or try regenerating images.
+                          Failed to load images for this adventure. You can
+                          continue chatting or try regenerating images.
                         </span>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          onClick={() => handleRegenerateImages(selectedAdventure)}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            handleRegenerateImages(selectedAdventure)
+                          }
                           className="ml-auto"
                         >
                           Retry Images
                         </Button>
                       </div>
                     )}
-                    
+
                     <div className="flex gap-3">
-                      <Input 
-                        placeholder={isSendDisabled ? "Please wait..." : "What do you want to do next?"} 
+                      <Input
+                        placeholder={
+                          isSendDisabled
+                            ? "Please wait..."
+                            : "What do you want to do next?"
+                        }
                         className="flex-1 bg-background/50 border-border/50 focus:border-primary rounded-xl px-4 py-3"
                         value={currentMessage}
-                        onChange={(e) => selectedAdventure && updateMessageForChat(selectedAdventure.sessionId, e.target.value)}
+                        onChange={(e) =>
+                          selectedAdventure &&
+                          updateMessageForChat(
+                            selectedAdventure.sessionId,
+                            e.target.value
+                          )
+                        }
                         onKeyPress={handleKeyPress}
                         disabled={isSendDisabled}
                       />
-                      <Button 
-                        onClick={handleSendMessage} 
+                      <Button
+                        onClick={handleSendMessage}
                         disabled={!currentMessage.trim() || isSendDisabled}
                         className="min-w-[90px] gradient-primary shadow-sm rounded-xl px-6"
                       >
@@ -1298,18 +1598,21 @@ const Adventures = () => {
                     <MessageSquare className="h-10 w-10 text-white" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-2xl font-bold text-foreground">Welcome to QuestWeaver</h3>
+                    <h3 className="text-2xl font-bold text-foreground">
+                      Welcome to QuestWeaver
+                    </h3>
                     <p className="text-muted-foreground leading-relaxed">
-                      Ready to embark on an epic adventure? Create your first story and let AI guide your journey through unlimited possibilities.
+                      Ready to embark on an epic adventure? Create your first
+                      story and let AI guide your journey through unlimited
+                      possibilities.
                       {imageGenerationEnabled && (
-                        <span className="block mt-2 text-sm text-green-600">
-                        </span>
+                        <span className="block mt-2 text-sm text-green-600"></span>
                       )}
                     </p>
                   </div>
                 </div>
-                <Button 
-                  className="gradient-primary shadow-glow px-8 py-3 rounded-xl font-medium" 
+                <Button
+                  className="gradient-primary shadow-glow px-8 py-3 rounded-xl font-medium"
                   onClick={handleStartAdventure}
                 >
                   <Plus className="h-5 w-5 mr-2" />
@@ -1333,7 +1636,7 @@ const Adventures = () => {
         isOpen={showDeleteModal}
         onClose={cancelDeleteAdventure}
         onConfirm={confirmDeleteAdventure}
-        adventureTitle={adventureToDelete?.title || ''}
+        adventureTitle={adventureToDelete?.title || ""}
         isDeleting={isDeletingAdventure}
       />
 
@@ -1342,11 +1645,11 @@ const Adventures = () => {
         isOpen={showImageZoom}
         onClose={handleCloseImageZoom}
         imageUrl={zoomedImage?.url || null}
-        title={zoomedImage?.title || ''}
-        imageType={zoomedImage?.type || 'character'}
+        title={zoomedImage?.title || ""}
+        imageType={zoomedImage?.type || "character"}
       />
     </div>
-  )
-}
+  );
+};
 
-export default Adventures
+export default Adventures;
