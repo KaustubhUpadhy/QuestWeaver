@@ -197,7 +197,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'signup', onAuthSuccess }: A
               />
             </div>
 
-            {/* Password - Not for forgot password */}
+            {/* Password*/}
             {mode !== 'forgot-password' && (
               <div className="space-y-2">
                 <label className="flex items-center text-sm font-medium text-foreground">
@@ -245,7 +245,7 @@ const AuthModal = ({ isOpen, onClose, initialMode = 'signup', onAuthSuccess }: A
             )}
           </form>
 
-          {/* OAuth Section - Not for forgot password */}
+          {/* OAuth Section */}
           {mode !== 'forgot-password' && (
             <>
               {/* Divider */}

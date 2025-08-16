@@ -3,7 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import { Sword, MessageSquare, Info, LogIn, LogOut, Menu, User, ChevronDown, Trash2, Loader2, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { useAuth } from "@/components/AuthContext";
 import AuthModal from "@/components/AuthModal";
 

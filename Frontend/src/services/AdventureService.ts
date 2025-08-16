@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 
-// FIXED: Use same-origin URLs via Vercel proxy - NO MORE CORS!
-const API_BASE_URL = '' // All requests go through Vercel rewrites
+
+const API_BASE_URL = '' 
 
 interface StoryInitRequest {
   genre: string
@@ -493,16 +493,15 @@ export class AdventureService {
     }
   }
 
-  // BULLETPROOF: Auto-retry image loading - NEVER shows red error banner!
+  // Auto-retry image loading
   static async loadAdventureImagesWithRetry(
     adventure: any, 
-    maxRetries: number = 8, // Much more aggressive retries
+    maxRetries: number = 8, 
     forceRefresh: boolean = false
   ): Promise<any> {
     
     console.log(`🖼️ Starting bulletproof image loading for ${adventure.sessionId}`)
     
-    // CRITICAL: Always return "loading" state initially, never error state
     const keepLoadingResult = {
       ...adventure,
       imageStatus: adventure.imageStatus || {
@@ -510,7 +509,7 @@ export class AdventureService {
         character_status: 'pending'
       },
       isImagesLoading: true,
-      imageLoadError: false  // NEVER set this to true!
+      imageLoadError: false  
     }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -623,7 +622,7 @@ export class AdventureService {
       } catch (error: any) {
         console.warn(`🔄 Attempt ${attempt} encountered error:`, error.message)
         
-        // Never give up - on final attempt, return loading state
+        // on final attempt, return loading state
         if (attempt === maxRetries) {
           console.log(`🔄 Final attempt failed, returning loading state (no error banner)`)
           return keepLoadingResult

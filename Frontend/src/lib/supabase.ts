@@ -1,27 +1,22 @@
 import { createClient } from '@supabase/supabase-js'
 
-// For Vite projects, use VITE_ prefix
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // More detailed error checking
 if (!supabaseUrl) {
-  console.error('❌ VITE_SUPABASE_URL is missing from environment variables')
+  console.error('VITE_SUPABASE_URL is missing from environment variables')
   console.error('Please add VITE_SUPABASE_URL to your .env file')
 }
 
 if (!supabaseAnonKey) {
-  console.error('❌ VITE_SUPABASE_ANON_KEY is missing from environment variables')
+  console.error('VITE_SUPABASE_ANON_KEY is missing from environment variables')
   console.error('Please add VITE_SUPABASE_ANON_KEY to your .env file')
 }
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Cannot initialize Supabase client due to missing environment variables')
-  console.error('Required variables: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY')
-  console.error('Current environment variables:', {
-    VITE_SUPABASE_URL: supabaseUrl ? '✅ Present' : '❌ Missing',
-    VITE_SUPABASE_ANON_KEY: supabaseAnonKey ? '✅ Present' : '❌ Missing'
-  })
+  console.error('Cannot initialize Supabase client due to missing environment variables')
 }
 
 // Create a safe fallback client that won't crash the app
@@ -42,12 +37,12 @@ try {
   )
   
   if (supabaseUrl && supabaseAnonKey) {
-    console.log('✅ Supabase client initialized successfully')
+    console.log('Supabase client initialized successfully')
   } else {
-    console.warn('⚠️ Supabase client initialized with placeholder values due to missing environment variables')
+    console.warn('Supabase client initialized with placeholder values due to missing environment variables')
   }
 } catch (error) {
-  console.error('❌ Failed to initialize Supabase client:', error)
+  console.error('Failed to initialize Supabase client:', error)
   
   // Create a mock client that won't crash the app
   supabase = {

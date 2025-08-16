@@ -8,31 +8,30 @@ from datetime import datetime
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-from supabase import create_client, Client
+from supabase import create_client
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import re
 import asyncio
 
-# Import our new RAG components
+
 from chroma_connection import get_memory_manager, MemoryManager
 from story_generator import StoryGenerator
 from image_generator import ImageGenerator
 
-# Load environment variables
 load_dotenv()
 
-# Initialize OpenAI (keeping for compatibility)
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Initialize Supabase with service role key for admin operations
+
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
 
-# Initialize as None first
+
 supabase_admin = None
 supabase_client = None
-# Add these imports
+
 from functools import wraps
 import time
 from collections import defaultdict, deque
@@ -57,15 +56,14 @@ class SimpleRateLimiter:
         
         return False
 
-# Global rate limiter instance
+
 rate_limiter = SimpleRateLimiter()
 
+#Decorator for Rate-Limiting endpoints
 def rate_limit(max_requests: int, window_seconds: int):
-    """Decorator for rate limiting endpoints"""
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Get user ID from dependencies
             user_id = None
             for key, value in kwargs.items():
                 if key == 'user_id':
@@ -83,30 +81,28 @@ def rate_limit(max_requests: int, window_seconds: int):
             return await func(*args, **kwargs)
         return wrapper
     return decorator
-# Don't crash if Supabase fails
+
 try:
     if all([supabase_url, supabase_service_key, supabase_anon_key]):
-        print(f"🔄 Initializing Supabase with URL: {supabase_url}")
+        print(f"Initializing Supabase with URL: {supabase_url}")
         
-        # Try simple initialization first
         supabase_admin = create_client(supabase_url, supabase_service_key)
         supabase_client = create_client(supabase_url, supabase_anon_key)
         
-        print("✅ Supabase clients initialized successfully")
+        print("Supabase clients initialized successfully")
     else:
-        print("⚠️ Missing Supabase environment variables")
+        print("Missing Supabase environment variables")
         print(f"URL exists: {bool(supabase_url)}")
         print(f"Service key exists: {bool(supabase_service_key)}")
         print(f"Anon key exists: {bool(supabase_anon_key)}")
         
 except Exception as e:
-    print(f"⚠️ Supabase initialization failed: {e}")
-    print("🚀 Continuing without Supabase (app will start but features limited)")
-    # Don't raise - let the app start
+    print(f"Supabase initialization failed: {e}")
+    print("Continuing without Supabase (app will start but features limited)")
 
 app = FastAPI(title="Interactive Story Generator API with RAG and Images", version="4.0.0")
 
-# Add CORS middleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -118,22 +114,19 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     allow_origin_regex=r"https://quest-weaver.*\.vercel\.app",
-    # Add these critical headers for preflight requests:
     expose_headers=["*"],
-    max_age=3600  # Cache preflight for 1 hour
+    max_age=3600  
 )
 @app.options("/{path:path}")
 async def handle_preflight(path: str):
-    """Handle OPTIONS requests during cold starts"""
     return Response(status_code=204)
 
-# Security
+
 security = HTTPBearer()
 
-# Initialize Image Generator
 image_generator = ImageGenerator()
 
-# Pydantic models (keeping existing ones)
+
 class StoryInitRequest(BaseModel):
     genre: str
     character: str
@@ -172,7 +165,6 @@ class ChatHistoryResponse(BaseModel):
     messages: List[ChatMessage]
     success: bool
 
-# New models for RAG features
 class StorySummaryResponse(BaseModel):
     session_id: str
     summary: str
@@ -188,7 +180,7 @@ class MemorySearchResponse(BaseModel):
     memories: List[Dict[str, str]]
     success: bool
 
-# New models for image features
+
 class ImageUrlResponse(BaseModel):
     url: Optional[str] = None
     success: bool
@@ -200,7 +192,7 @@ class ImageStatusResponse(BaseModel):
     world_updated_at: Optional[str] = None
     character_updated_at: Optional[str] = None
 
-# Authentication helper function (unchanged)
+# Authentication helper function
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         if not supabase_client:
@@ -217,9 +209,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         print(f"Authentication error: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# Database helper functions (enhanced for images)
+# Database helper function, Saves a new chat session to database with image status
 async def save_chat_to_db(user_id: str, session_id: str, title: str, system_prompt: str):
-    """Save a new chat session to database with image status"""
     try:
         data = {
             "id": session_id,
@@ -237,8 +228,8 @@ async def save_chat_to_db(user_id: str, session_id: str, title: str, system_prom
         print(f"Error saving chat to DB: {e}")
         return False
 
+#Update the image status in Database
 async def update_image_status(chat_id: str, user_id: str, image_type: str, status: str, s3_key: str = None):
-    """Update image status in database"""
     try:
         update_data = {
             f"{image_type}_image_status": status,
@@ -254,8 +245,8 @@ async def update_image_status(chat_id: str, user_id: str, image_type: str, statu
         print(f"Error updating image status: {e}")
         return False
 
+# Saves a message from the chat, to the Database
 async def save_message_to_db(chat_id: str, user_id: str, role: str, content: str):
-    """Save a message to database"""
     try:
         data = {
             "chat_id": chat_id,
@@ -271,8 +262,8 @@ async def save_message_to_db(chat_id: str, user_id: str, role: str, content: str
         print(f"Error saving message to DB: {e}")
         return None
 
+# Gets the Full Chat History from the Database
 async def get_chat_history(chat_id: str, user_id: str):
-    """Get full chat history from database with proper ordering"""
     try:
         chat_result = supabase_admin.table("chats").select("*").eq("id", chat_id).eq("user_id", user_id).execute()
         if not chat_result.data:
@@ -301,8 +292,8 @@ async def get_chat_history(chat_id: str, user_id: str):
         print(f"Error getting chat history: {e}")
         return None
 
+# Gets all the chats for a user
 async def get_user_chats(user_id: str):
-    """Get all chats for a user with proper ordering and last message preview including image status"""
     try:
         chats_result = supabase_admin.table("chats").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
         
@@ -328,8 +319,7 @@ async def get_user_chats(user_id: str):
         print(f"Error getting user chats: {e}")
         return []
 
-async def get_message_count(chat_id: str):
-    """Get message count for a specific chat"""
+async def get_message_count(chat_id: str): # Gets message count for a chat
     try:
         result = supabase_admin.table("chat_messages").select("id", count="exact").eq("chat_id", chat_id).execute()
         return result.count if result.count else 0
@@ -338,7 +328,6 @@ async def get_message_count(chat_id: str):
         return 0
 
 async def check_chat_ownership(chat_id: str, user_id: str):
-    """Check if a chat belongs to a specific user"""
     try:
         result = supabase_admin.table("chats").select("id").eq("id", chat_id).eq("user_id", user_id).execute()
         return len(result.data) > 0
@@ -346,8 +335,7 @@ async def check_chat_ownership(chat_id: str, user_id: str):
         print(f"Error checking chat ownership: {e}")
         return False
 
-async def delete_chat(chat_id: str):
-    """Delete a chat and its messages"""
+async def delete_chat(chat_id: str):# Deletes the chat and its messages
     try:
         supabase_admin.table("chat_messages").delete().eq("chat_id", chat_id).execute()
         result = supabase_admin.table("chats").delete().eq("id", chat_id).execute()
@@ -357,7 +345,6 @@ async def delete_chat(chat_id: str):
         return False
 
 async def get_chat_info(chat_id: str, user_id: str):
-    """Get chat info including image status"""
     try:
         result = supabase_admin.table("chats").select("*").eq("id", chat_id).eq("user_id", user_id).execute()
         return result.data[0] if result.data else None
@@ -367,7 +354,6 @@ async def get_chat_info(chat_id: str, user_id: str):
 
 # Background task for image generation
 async def generate_images_background(user_id: str, chat_id: str, story_content: str):
-    """Background task to generate and upload images"""
     try:
         print(f"Starting image generation for chat {chat_id}")
         
@@ -393,11 +379,10 @@ async def generate_images_background(user_id: str, chat_id: str, story_content: 
             
     except Exception as e:
         print(f"Error in background image generation: {e}")
-        # Mark both as failed
         await update_image_status(chat_id, user_id, "world", "failed")
         await update_image_status(chat_id, user_id, "character", "failed")
 
-# Story generation functions - Enhanced with RAG
+# Story generation messages
 def create_system_message(genre, character, world_additions, actions):
     """Create the system message for the game master"""
     return f"""You are a creative, immersive, and adaptive text-based game master with infinite memory. You generate dynamic adventures for the player, complete with rich world-building, characters, challenges, and story progression. 
@@ -423,8 +408,7 @@ Story Parameters:
 
 Start with an engaging scenario, provide rich world-building details, and wait for the player's action after describing each scene."""
 
-def extract_title_from_story(story_content: str) -> str:
-    """Extract title from story content"""
+def extract_title_from_story(story_content: str) -> str: #Extract title from story content
     title_match = re.search(r'\*\*Title:\s*([^*]+)\*\*', story_content, re.IGNORECASE)
     if title_match:
         return title_match.group(1).strip()
@@ -475,15 +459,14 @@ async def initialize_story(
         if initial_response.startswith("Error generating story:"):
             raise HTTPException(status_code=500, detail=initial_response)
         
-        # Extract title from story content
         title = extract_title_from_story(initial_response)
         
-        # Save chat to database
+
         saved = await save_chat_to_db(user_id, session_id, title, system_message)
         if not saved:
             raise HTTPException(status_code=500, detail="Failed to save chat to database")
         
-        # Save initial user message and AI response to database
+    
         await save_message_to_db(session_id, user_id, "user", "Generate a random story and world for me.")
         await save_message_to_db(session_id, user_id, "assistant", initial_response)
         
@@ -509,9 +492,8 @@ async def take_story_action(
     user_id: str = Depends(get_current_user),
     story_gen: StoryGenerator = Depends(get_story_generator)
 ):
-    """Continue the story with a user action using RAG"""
+    #Continue the story with a user action using RAG
     try:
-        # Get chat history from database
         chat_data = await get_chat_history(request.session_id, user_id)
         if not chat_data:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -525,7 +507,7 @@ async def take_story_action(
             for msg in db_messages
         ]
         
-        # Generate response using RAG-enhanced story generator
+        
         response = await story_gen.continue_story(
             user_action=request.user_action,
             user_id=user_id,
@@ -533,11 +515,11 @@ async def take_story_action(
             recent_messages=recent_messages
         )
         
-        # Check for error in response
+        
         if response.startswith("Error continuing story:"):
             raise HTTPException(status_code=500, detail=response)
         
-        # Save user action and AI response to database
+        
         await save_message_to_db(request.session_id, user_id, "user", request.user_action)
         await save_message_to_db(request.session_id, user_id, "assistant", response)
         
@@ -553,14 +535,14 @@ async def take_story_action(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process action: {str(e)}")
 
-# New RAG-specific endpoints
+
 @app.get("/api/story/summary/{session_id}", response_model=StorySummaryResponse)
 async def get_story_summary(
     session_id: str, 
     user_id: str = Depends(get_current_user),
     story_gen: StoryGenerator = Depends(get_story_generator)
 ):
-    """Get an AI-generated summary of the story so far"""
+    #Get an AI-generated summary of the story so far
     try:
         # Check if session exists and belongs to user
         chat_exists = await check_chat_ownership(session_id, user_id)
@@ -587,14 +569,14 @@ async def search_memories(
     user_id: str = Depends(get_current_user),
     memory_manager: MemoryManager = Depends(get_memory_manager)
 ):
-    """Search through story memories using semantic search"""
+    #Search through story memories using semantic search
     try:
-        # Check if session exists and belongs to user
+       
         chat_exists = await check_chat_ownership(request.session_id, user_id)
         if not chat_exists:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Search memories
+      
         memories = await memory_manager.retrieve_memories(
             query=request.query,
             user_id=user_id,
@@ -602,7 +584,7 @@ async def search_memories(
             k=request.limit
         )
         
-        # Format response
+        
         formatted_memories = []
         for memory in memories:
             formatted_memories.append({
@@ -631,7 +613,7 @@ async def get_image_url(
     variant: str = "web",  # "master", "web", "thumb", "avatar"
     user_id: str = Depends(get_current_user)
 ):
-    """Get presigned URL for image access"""
+   
     try:
         # Validate parameters
         if image_type not in ["world", "character"]:
@@ -645,12 +627,11 @@ async def get_image_url(
         if variant not in valid_variants[image_type]:
             raise HTTPException(status_code=400, detail=f"Invalid variant for {image_type}")
         
-        # Check if chat exists and belongs to user
+        
         chat_info = await get_chat_info(chat_id, user_id)
         if not chat_info:
             raise HTTPException(status_code=404, detail="Chat not found")
         
-        # Check image status
         status_key = f"{image_type}_image_status"
         if chat_info.get(status_key) != "ready":
             return ImageUrlResponse(
@@ -686,9 +667,8 @@ async def get_image_status(
     chat_id: str,
     user_id: str = Depends(get_current_user)
 ):
-    """Get image generation status for a chat"""
+    #Get image generation status for a chat
     try:
-        # Check if chat exists and belongs to user
         chat_info = await get_chat_info(chat_id, user_id)
         if not chat_info:
             raise HTTPException(status_code=404, detail="Chat not found")
@@ -712,9 +692,9 @@ async def regenerate_images(
     background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user)
 ):
-    """Regenerate images for a chat"""
+    #Regenerate images for a chat
     try:
-        # Check if chat exists and belongs to user
+
         chat_info = await get_chat_info(chat_id, user_id)
         if not chat_info:
             raise HTTPException(status_code=404, detail="Chat not found")
@@ -756,21 +736,16 @@ async def delete_user_account(
     user_id: str = Depends(get_current_user),
     story_gen: StoryGenerator = Depends(get_story_generator)
 ):
-    """
-    Permanently delete all user data including:
-    - All chat sessions and messages from Supabase
-    - All memory data from ChromaDB
-    - All images from S3
-    - User profile data
-    """
+    
+    #Permanently deletes all user data with account deletion
     try:
-        print(f"🗑️ Starting account deletion for user: {user_id}")
+        print(f"Starting account deletion for user: {user_id}")
         
         # Step 1: Get all user sessions to identify resources to delete
         user_sessions = await get_user_chats(user_id)
         session_ids = [session["id"] for session in user_sessions]
         
-        print(f"📋 Found {len(session_ids)} sessions to delete")
+        print(f"Found {len(session_ids)} sessions to delete")
         
         # Step 2: Delete all images from S3 for each session
         s3_deletion_errors = []
@@ -793,19 +768,19 @@ async def delete_user_account(
                                         Bucket=image_generator.bucket,
                                         Key=s3_key
                                     )
-                                    print(f"🖼️ Deleted S3 object: {s3_key}")
+                                    print(f"Deleted S3 object: {s3_key}")
                                 except Exception as s3_error:
-                                    print(f"⚠️ Failed to delete S3 object {s3_key}: {s3_error}")
+                                    print(f"Failed to delete S3 object {s3_key}: {s3_error}")
                                     s3_deletion_errors.append(str(s3_error))
                                     
                     except Exception as session_error:
-                        print(f"⚠️ Error deleting images for session {session_id}: {session_error}")
+                        print(f"Error deleting images for session {session_id}: {session_error}")
                         s3_deletion_errors.append(str(session_error))
                         
-                print(f"🖼️ S3 cleanup completed with {len(s3_deletion_errors)} errors")
+                print(f"S3 cleanup completed with {len(s3_deletion_errors)} errors")
                 
             except Exception as s3_error:
-                print(f"❌ S3 deletion failed: {s3_error}")
+                print(f"S3 deletion failed: {s3_error}")
                 s3_deletion_errors.append(str(s3_error))
         
         # Step 3: Delete all memory data from ChromaDB
@@ -816,42 +791,41 @@ async def delete_user_account(
                     try:
                         success = await story_gen.cleanup_chat_memories(session_id)
                         if success:
-                            print(f"🧠 Deleted memories for session: {session_id}")
+                            print(f"Deleted memories for session: {session_id}")
                         else:
                             error_msg = f"Failed to delete memories for session: {session_id}"
-                            print(f"⚠️ {error_msg}")
+                            print(f"{error_msg}")
                             memory_deletion_errors.append(error_msg)
                     except Exception as memory_error:
                         error_msg = f"Error deleting memories for session {session_id}: {memory_error}"
-                        print(f"⚠️ {error_msg}")
+                        print(f"{error_msg}")
                         memory_deletion_errors.append(error_msg)
                         
-                print(f"🧠 Memory cleanup completed with {len(memory_deletion_errors)} errors")
+                print(f"Memory cleanup completed with {len(memory_deletion_errors)} errors")
                 
             except Exception as memory_error:
-                print(f"❌ Memory deletion failed: {memory_error}")
+                print(f"Memory deletion failed: {memory_error}")
                 memory_deletion_errors.append(str(memory_error))
         
         # Step 4: Delete all chat messages from Supabase
         db_deletion_errors = []
         try:
-            # Delete all chat messages
             if session_ids:
                 for session_id in session_ids:
                     try:
                         supabase_admin.table("chat_messages").delete().eq("chat_id", session_id).execute()
-                        print(f"💬 Deleted messages for session: {session_id}")
+                        print(f"Deleted messages for session: {session_id}")
                     except Exception as msg_error:
                         error_msg = f"Error deleting messages for session {session_id}: {msg_error}"
-                        print(f"⚠️ {error_msg}")
+                        print(f"{error_msg}")
                         db_deletion_errors.append(error_msg)
             
-            # Delete all chat sessions
+            
             supabase_admin.table("chats").delete().eq("user_id", user_id).execute()
-            print(f"💬 Deleted all chat sessions for user: {user_id}")
+            print(f"Deleted all chat sessions for user: {user_id}")
             
         except Exception as db_error:
-            print(f"❌ Database deletion failed: {db_error}")
+            print(f"Database deletion failed: {db_error}")
             db_deletion_errors.append(str(db_error))
         
         # Step 5: Prepare deletion summary
@@ -866,11 +840,11 @@ async def delete_user_account(
             "total_errors": total_errors
         }
         
-        print(f"📊 Deletion Summary: {deletion_summary}")
+        print(f"Deletion Summary: {deletion_summary}")
         
         # If there were critical errors, still return success but log details
         if total_errors > 0:
-            print(f"⚠️ Account deletion completed with {total_errors} non-critical errors")
+            print(f"Account deletion completed with {total_errors} non-critical errors")
             
         return {
             "success": True,
@@ -890,10 +864,9 @@ async def delete_user_account(
             detail=f"Account deletion failed: {str(e)}"
         )
 
-# Keep existing endpoints unchanged
+# Get full chat history for a session
 @app.get("/api/story/session/{session_id}", response_model=ChatHistoryResponse)
 async def get_session_history(session_id: str, user_id: str = Depends(get_current_user)):
-    """Get full chat history for a session"""
     try:
         chat_data = await get_chat_history(session_id, user_id)
         if not chat_data:
@@ -915,9 +888,10 @@ async def get_session_history(session_id: str, user_id: str = Depends(get_curren
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get session history: {str(e)}")
 
+# Lists all sessions for the authenticated user with proper message previews and image status
 @app.get("/api/story/sessions")
 async def list_sessions(user_id: str = Depends(get_current_user)):
-    """List all sessions for the authenticated user with proper message previews and image status"""
+    
     try:
         chats = await get_user_chats(user_id)
         
@@ -953,9 +927,8 @@ async def delete_session(
     user_id: str = Depends(get_current_user),
     story_gen: StoryGenerator = Depends(get_story_generator)
 ):
-    """Delete a story session and its memories"""
+    #Delete a story session and its memories
     try:
-        # Check if session exists and belongs to user
         chat_exists = await check_chat_ownership(session_id, user_id)
         if not chat_exists:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -965,10 +938,6 @@ async def delete_session(
         if not memory_cleanup_success:
             print(f"Warning: Failed to cleanup memories for chat {session_id}")
         
-        # TODO: Delete images from S3 (optional - you might want to keep them for a while)
-        # This would require implementing S3 cleanup in ImageGenerator
-        
-        # Delete the session from Supabase
         success = await delete_chat(session_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete session")
@@ -983,7 +952,6 @@ async def delete_session(
 # Health check endpoint for ChromaDB
 @app.get("/api/health/memory")
 async def check_memory_health(memory_manager: MemoryManager = Depends(get_memory_manager)):
-    """Health check for memory system"""
     try:
         # Try to perform a simple operation
         test_memories = await memory_manager.retrieve_memories(
@@ -1008,10 +976,7 @@ async def check_memory_health(memory_manager: MemoryManager = Depends(get_memory
 # Health check endpoint for Image system
 @app.get("/api/health/images")
 async def check_image_health():
-    """Lightweight health check for image generation system"""
     try:
-        # FIXED: Don't touch external services during health check
-        # Just verify that the image generator is initialized
         if not image_generator:
             return {
                 "status": "unhealthy",
@@ -1079,7 +1044,6 @@ async def root():
     }
 @app.get("/health")
 async def health_check():
-    """Lightweight health check for uptime monitoring"""
     return {
         "status": "ok",
         "timestamp": datetime.now().isoformat(),

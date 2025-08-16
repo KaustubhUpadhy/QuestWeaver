@@ -74,7 +74,6 @@ export function ThemeProvider({
 
 // Function to apply Dark Arcane theme colors
 const applyDarkArcaneTheme = (root: HTMLElement) => {
-  // Convert hex to HSL for CSS custom properties
   const hexToHsl = (hex: string) => {
     const r = parseInt(hex.slice(1, 3), 16) / 255
     const g = parseInt(hex.slice(3, 5), 16) / 255
@@ -98,11 +97,9 @@ const applyDarkArcaneTheme = (root: HTMLElement) => {
     return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`
   }
 
-  // Apply Dark Arcane theme colors
   root.style.setProperty('--primary', hexToHsl(darkArcaneTheme.primary))
   root.style.setProperty('--background', hexToHsl(darkArcaneTheme.background))
   
-  // Update gradient and shadows
   root.style.setProperty('--gradient-primary', `linear-gradient(135deg, ${darkArcaneTheme.primary}, ${darkArcaneTheme.accent})`)
   root.style.setProperty('--shadow-glow', `0 0 40px ${darkArcaneTheme.primary}33`)
   root.style.setProperty('--shadow-elegant', `0 10px 30px -10px ${darkArcaneTheme.primary}22`)

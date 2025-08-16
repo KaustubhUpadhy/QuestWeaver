@@ -21,24 +21,6 @@ const ImageZoomModal = ({ isOpen, onClose, imageUrl, title, imageType }: ImageZo
     }
   }, [isOpen, imageUrl])
 
-  const handleDownload = async () => {
-    if (!imageUrl) return
-    
-    try {
-      const response = await fetch(imageUrl)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${imageType}.webp`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Failed to download image:', error)
-    }
-  }
 
   const handleImageLoad = () => {
     setIsLoading(false)

@@ -9,10 +9,9 @@ import NotFound from '@/pages/NotFound'
 import AuthCallback from '@/components/AuthCallback'
 import { useEffect } from 'react'
 
-// Global error handler for unhandled promise rejections
+
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason)
-  // Prevent the default behavior that would cause a white screen
   event.preventDefault()
 })
 
@@ -23,7 +22,6 @@ window.addEventListener('error', (event) => {
 
 function App() {
   useEffect(() => {
-    // Check if required environment variables are present
     const requiredEnvVars = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']
     const missingEnvVars = requiredEnvVars.filter(envVar => !import.meta.env[envVar])
     

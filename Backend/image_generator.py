@@ -5,14 +5,14 @@ import re
 from PIL import Image
 from io import BytesIO
 from dotenv import load_dotenv
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict
 import logging
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+#Class for Handling image generation and S3 storage for avatar and world images attached to the chats
 class ImageGenerator:
-    """Handles image generation and S3 storage for story elements"""
     
     def __init__(self):
         # Hugging Face setup
@@ -34,9 +34,8 @@ class ImageGenerator:
             "Authorization": f"Bearer {self.hf_token}",
             "Accept": "image/png"
         }
-    
+    # Extracts world description from story content for world image generation
     def extract_world_content(self, story_content: str) -> str:
-        """Extract world description from story content (before Character section)"""
         try:
             # Find the world section - typically after **World:** and before **Character:**
             world_match = re.search(r'\*\*World:\s*([^*]+?)(?=\*\*Character:|$)', story_content, re.DOTALL | re.IGNORECASE)
@@ -44,7 +43,7 @@ class ImageGenerator:
                 world_text = world_match.group(1).strip()
                 return world_text
             
-            # Fallback: extract first paragraph after title
+            # Extract first paragraph after title
             lines = story_content.split('\n')
             world_content = []
             skip_first_lines = True
@@ -66,18 +65,18 @@ class ImageGenerator:
                 skip_first_lines = False
                 world_content.append(line)
                 
-                # Stop if we've collected enough content
+            
                 if len(' '.join(world_content)) > 200:
                     break
             
-            return ' '.join(world_content)[:300]  # Limit to 300 chars
+            return ' '.join(world_content)[:300]  
             
         except Exception as e:
             logger.error(f"Error extracting world content: {e}")
             return "fantasy world"
     
+    # Extracts character related information from the story content, for character avatar creation for the story chat
     def extract_character_content(self, story_content: str) -> str:
-        """Extract character description from story content"""
         try:
             # Find the character section
             char_match = re.search(r'\*\*Character:\s*([^*]+?)(?=\*\*[^*]|What do you do\?|$)', story_content, re.DOTALL | re.IGNORECASE)
@@ -85,7 +84,6 @@ class ImageGenerator:
                 char_text = char_match.group(1).strip()
                 return char_text
             
-            # Fallback: look for character-related keywords
             lines = story_content.split('\n')
             for line in lines:
                 line = line.strip().lower()
@@ -98,8 +96,8 @@ class ImageGenerator:
             logger.error(f"Error extracting character content: {e}")
             return "fantasy character"
     
+    # Function to create an optimized prompt for Image Generation
     def create_image_prompt(self, content: str, image_type: str) -> str:
-        """Create optimized prompt for image generation"""
         base_style = "cinematic, highly detailed, fantasy art, digital painting"
         
         if image_type == "world":
@@ -109,8 +107,8 @@ class ImageGenerator:
         
         return f"{content}, {base_style}"
     
+    # Function to create Hugging Face API
     async def generate_image(self, prompt: str) -> Optional[bytes]:
-        """Generate image using Hugging Face API"""
         try:
             payload = {
                 "inputs": prompt,
@@ -134,17 +132,15 @@ class ImageGenerator:
             logger.error(f"Error generating image: {e}")
             return None
     
+    # For Creating Different size variants for the images
     def create_image_variants(self, image_bytes: bytes, image_type: str) -> Dict[str, Tuple[bytes, str]]:
-        """Create different sized variants using Pillow"""
         variants = {}
         
         try:
-            # Open the original image
             original_image = Image.open(BytesIO(image_bytes))
             
-            if image_type == "world":
-                # World image variants
-                variants["master"] = (image_bytes, "image/png")  # Original
+            if image_type == "world":   # World image variants
+                variants["master"] = (image_bytes, "image/png")  
                 
                 # Web version (1280 width)
                 web_img = original_image.copy()
@@ -175,7 +171,6 @@ class ImageGenerator:
                 
                 # Avatar (256, square crop)
                 avatar_img = original_image.copy()
-                # Crop to square first
                 width, height = avatar_img.size
                 size = min(width, height)
                 left = (width - size) // 2
@@ -192,8 +187,8 @@ class ImageGenerator:
             logger.error(f"Error creating image variants: {e}")
             return {}
     
+    # Generates S3 key for image storage
     def get_s3_key(self, user_id: str, chat_id: str, image_type: str, variant: str) -> str:
-        """Generate S3 key for image storage"""
         if image_type == "world":
             if variant == "master":
                 return f"users/{user_id}/chats/{chat_id}/world/master.png"
@@ -212,8 +207,8 @@ class ImageGenerator:
         
         return f"users/{user_id}/chats/{chat_id}/{image_type}/{variant}"
     
+    # Uploads images to S3
     async def upload_to_s3(self, image_bytes: bytes, s3_key: str, content_type: str) -> bool:
-        """Upload image to S3"""
         try:
             self.s3_client.put_object(
                 Bucket=self.bucket,
@@ -227,11 +222,11 @@ class ImageGenerator:
             logger.error(f"Error uploading to S3: {e}")
             return False
     
+    # Function to handle the entire process for generating and storing images 
     async def generate_and_store_images(self, user_id: str, chat_id: str, story_content: str) -> Dict[str, bool]:
-        """Generate and store both world and character images"""
         results = {"world": False, "character": False}
         
-        # Extract content for both image types
+        # Extract content for image
         world_content = self.extract_world_content(story_content)
         character_content = self.extract_character_content(story_content)
         
@@ -243,7 +238,7 @@ class ImageGenerator:
             if world_image_bytes:
                 world_variants = self.create_image_variants(world_image_bytes, "world")
                 
-                # Upload all world variants
+                # Upload all world images
                 world_success = True
                 for variant, (img_bytes, content_type) in world_variants.items():
                     s3_key = self.get_s3_key(user_id, chat_id, "world", variant)
@@ -265,7 +260,7 @@ class ImageGenerator:
             if character_image_bytes:
                 character_variants = self.create_image_variants(character_image_bytes, "character")
                 
-                # Upload all character variants
+                # Upload all character images
                 character_success = True
                 for variant, (img_bytes, content_type) in character_variants.items():
                     s3_key = self.get_s3_key(user_id, chat_id, "character", variant)
@@ -281,8 +276,8 @@ class ImageGenerator:
         
         return results
     
+    # Generate presigned url for storage in Supabase and Frontend
     def generate_presigned_url(self, s3_key: str, expiration: int = 3600) -> Optional[str]:
-        """Generate presigned URL for S3 object"""
         try:
             url = self.s3_client.generate_presigned_url(
                 'get_object',

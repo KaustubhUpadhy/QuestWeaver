@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type { User, Session, AuthError } from '@supabase/supabase-js'
 
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://questweaver-819u.onrender.com'
+const API_BASE_URL = import.meta.env.VITE_API_URL 
 
 interface AuthContextType {
   user: User | null
@@ -46,9 +46,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         
         if (error) {
           console.error('AuthProvider: Error getting session:', error)
-          // Don't throw error, just log it and continue with null session
-          setSession(null)
-          setUser(null)
         } else {
           console.log('AuthProvider: Initial session retrieved:', session ? 'authenticated' : 'not authenticated')
           setSession(session)
@@ -229,11 +226,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           }
         })
 
-        console.log('🗑️ AuthProvider: Delete API response status:', response.status)
+        console.log('AuthProvider: Delete API response status:', response.status)
 
         if (!response.ok) {
           const errorText = await response.text()
-          console.error('🗑️ AuthProvider: Delete API error response:', errorText)
+          console.error('AuthProvider: Delete API error response:', errorText)
           throw new Error(`Failed to delete user data: ${response.status} ${errorText}`)
         }
 

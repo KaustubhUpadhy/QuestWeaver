@@ -289,7 +289,7 @@ const AdventureSetupModal = ({ isOpen, onClose, onAdventureCreated }: AdventureS
           {/* Footer Hint */}
           <div className="mt-4 text-center">
             <p className="text-xs text-muted-foreground/70">
-              ✨ Your adventure will be uniquely crafted by AI based on your preferences
+              Your adventure will be uniquely crafted by AI based on your preferences
             </p>
           </div>
         </div>

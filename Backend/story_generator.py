@@ -1,9 +1,8 @@
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage, AIMessage
-from langchain.memory import ConversationSummaryBufferMemory
+from langchain.schema import HumanMessage, AIMessage
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import Document
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 import os
 from dotenv import load_dotenv
 import logging
@@ -12,25 +11,27 @@ from chroma_connection import MemoryManager
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+# Class for Generating stories with RAG capabilities
 class StoryGenerator:
-    """Enhanced story generator with RAG capabilities"""
-    
+
     def __init__(self, memory_manager: MemoryManager):
         self.llm = ChatOpenAI(
             temperature=1.0,
             model_name="gpt-4o",
-            openai_api_key=os.getenv("OPENAI_API_KEY")
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
         )
         self.memory_manager = memory_manager
-        
-        # Create prompt template with memory injection
-        self.prompt_template = ChatPromptTemplate.from_messages([
-            ("system", self._get_system_prompt_template()),
-            MessagesPlaceholder(variable_name="memory_context"),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{user_input}")
-        ])
-    
+
+        # Creates prompt template with memory injection
+        self.prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", self._get_system_prompt_template()),
+                MessagesPlaceholder(variable_name="memory_context"),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{user_input}"),
+            ]
+        )
+
     def _get_system_prompt_template(self) -> str:
         """Get the enhanced system prompt with memory awareness - INCLUDES ACTION REQUIREMENT"""
         return """You are a creative, immersive, and adaptive text-based game master with perfect memory. You generate dynamic adventures for the player, complete with rich world-building, characters, challenges, and story progression.
@@ -63,53 +64,57 @@ What do you do?
 3. [Specific action option]
 4. [Specific action option]
 """
-
+    # Creates Context String from retrieved memories
     def _build_memory_context(self, memories: List[Document]) -> str:
-        """Build context string from retrieved memories"""
         if not memories:
             return "No previous context available."
-        
+
         context_parts = []
         for i, memory in enumerate(memories, 1):
-            role = memory.metadata.get('role', 'unknown')
-            memory_type = memory.metadata.get('memory_type', 'general')
+            role = memory.metadata.get("role", "unknown")
+            memory_type = memory.metadata.get("memory_type", "general")
             content = memory.page_content
-            
+
             context_parts.append(f"Memory {i} [{role}, {memory_type}]: {content}")
-        
+
         return "\n".join(context_parts)
     
+    # Extracts key events for memory storage
     def _extract_key_events(self, content: str, role: str) -> List[Dict[str, Any]]:
         """Extract key events from content for enhanced memory storage"""
         events = []
-        
-        # Basic event extraction - you can enhance this with NLP
+
         if role == "user":
-            # User actions are typically important
-            events.append({
-                "memory_type": "action",
-                "description": f"Player action: {content}"
-            })
+            events.append(
+                {"memory_type": "action", "description": f"Player action: {content}"}
+            )
         elif role == "assistant":
             # Extract key story elements from AI responses
-            lines = content.split('\n')
+            lines = content.split("\n")
             for line in lines:
                 line = line.strip()
-                if line.startswith('**') and line.endswith('**'):
-                    # Likely a title or important heading
-                    events.append({
-                        "memory_type": "lore",
-                        "description": f"Story element: {line}"
-                    })
-                elif any(keyword in line.lower() for keyword in ['meets', 'finds', 'discovers', 'enters', 'defeats', 'encounters']):
-                    # Potential key story events
-                    events.append({
-                        "memory_type": "event",
-                        "description": f"Story event: {line}"
-                    })
-        
-        return events
+                if line.startswith("**") and line.endswith("**"):
+                    events.append(
+                        {"memory_type": "lore", "description": f"Story element: {line}"}
+                    )
+                elif any(
+                    keyword in line.lower()
+                    for keyword in [
+                        "meets",
+                        "finds",
+                        "discovers",
+                        "enters",
+                        "defeats",
+                        "encounters",
+                    ]
+                ):
     
+                    events.append(
+                        {"memory_type": "event", "description": f"Story event: {line}"}
+                    )
+
+        return events
+
     async def generate_initial_story(
         self,
         genre: str,
@@ -117,11 +122,11 @@ What do you do?
         world_additions: str,
         actions: str,
         user_id: str,
-        chat_id: str
+        chat_id: str,
     ) -> str:
-        """Generate initial story with memory storage - FIXED to include actions"""
+        
+        # Generate Initial Story
         try:
-            # Create comprehensive system prompt that ensures actions are included
             system_prompt = f"""You are a creative, immersive, and adaptive text-based game master. You generate dynamic adventures for the player, complete with rich world-building, characters, challenges, and story progression. 
 
 Key instructions:
@@ -156,13 +161,13 @@ What do you do?
 2. [Action option 2]
 3. [Action option 3]
 4. [Action option 4]"""
-            
+
             # Generate story with explicit action requirement
             messages = [HumanMessage(content=system_prompt)]
             response = await self.llm.agenerate([messages])
             story_content = response.generations[0][0].text
-            
-            # Store initial story in memory
+
+            # Stores initial story in memory
             await self.memory_manager.store_memory(
                 content=story_content,
                 user_id=user_id,
@@ -172,10 +177,10 @@ What do you do?
                 additional_metadata={
                     "genre": genre,
                     "character": character,
-                    "world_additions": world_additions
-                }
+                    "world_additions": world_additions,
+                },
             )
-            
+
             # Extract and store key events
             events = self._extract_key_events(story_content, "assistant")
             for event in events:
@@ -184,23 +189,22 @@ What do you do?
                     user_id=user_id,
                     chat_id=chat_id,
                     role="assistant",
-                    memory_type=event["memory_type"]
+                    memory_type=event["memory_type"],
                 )
-            
+
             return story_content
-            
+
         except Exception as e:
             logger.error(f"Error generating initial story: {e}")
             return f"Error generating story: {str(e)}"
-    
+
     async def continue_story(
         self,
         user_action: str,
         user_id: str,
         chat_id: str,
-        recent_messages: List[Dict[str, str]] = None
+        recent_messages: List[Dict[str, str]] = None,
     ) -> str:
-        """Continue story with RAG-enhanced context - FIXED to include actions"""
         try:
             # Store user action in memory first
             await self.memory_manager.store_memory(
@@ -208,38 +212,35 @@ What do you do?
                 user_id=user_id,
                 chat_id=chat_id,
                 role="user",
-                memory_type="action"
+                memory_type="action",
             )
-            
+
             # Retrieve relevant memories based on user action
             relevant_memories = await self.memory_manager.retrieve_memories(
                 query=user_action,
                 user_id=user_id,
                 chat_id=chat_id,
                 k=5,
-                memory_types=["action", "event", "lore", "npc", "location"]
+                memory_types=["action", "event", "lore", "npc", "location"],
             )
-            
+
             # Get recent conversation context
             recent_memories = await self.memory_manager.get_recent_memories(
-                user_id=user_id,
-                chat_id=chat_id,
-                limit=6  # Last 3 exchanges
+                user_id=user_id, chat_id=chat_id, limit=6  # Last 3 exchanges
             )
-            
-            # Build memory context
+
+           
             memory_context = self._build_memory_context(relevant_memories)
-            
+
             # Build recent chat history
             chat_history = []
             if recent_messages:
-                for msg in recent_messages[-6:]:  # Last 3 exchanges
+                for msg in recent_messages[-6:]:  
                     if msg["role"] == "user":
                         chat_history.append(HumanMessage(content=msg["content"]))
                     else:
                         chat_history.append(AIMessage(content=msg["content"]))
-            
-            # Create enhanced prompt that ensures actions are included
+
             enhanced_prompt = f"""Based on the memory context and recent conversation, respond to the player's action: "{user_action}"
 
 MEMORY CONTEXT:
@@ -261,21 +262,20 @@ What do you do?
 2. [Specific action option related to current situation]
 3. [Specific action option related to current situation]
 4. [Specific action option related to current situation]"""
-            
-            # Generate response
+
+         
             messages = chat_history + [HumanMessage(content=enhanced_prompt)]
             response = await self.llm.agenerate([messages])
             story_response = response.generations[0][0].text
-            
-            # Store AI response in memory
+
             await self.memory_manager.store_memory(
                 content=story_response,
                 user_id=user_id,
                 chat_id=chat_id,
                 role="assistant",
-                memory_type="response"
+                memory_type="response",
             )
-            
+
             # Extract and store key events from the response
             events = self._extract_key_events(story_response, "assistant")
             for event in events:
@@ -284,21 +284,17 @@ What do you do?
                     user_id=user_id,
                     chat_id=chat_id,
                     role="assistant",
-                    memory_type=event["memory_type"]
+                    memory_type=event["memory_type"],
                 )
-            
+
             return story_response
-            
+
         except Exception as e:
             logger.error(f"Error continuing story: {e}")
             return f"Error continuing story: {str(e)}"
-    
-    async def get_story_summary(
-        self,
-        user_id: str,
-        chat_id: str
-    ) -> str:
-        """Generate a summary of the story so far"""
+
+    # Function to Generate the story summary
+    async def get_story_summary(self, user_id: str, chat_id: str) -> str:
         try:
             # Get all story memories
             all_memories = await self.memory_manager.retrieve_memories(
@@ -306,15 +302,15 @@ What do you do?
                 user_id=user_id,
                 chat_id=chat_id,
                 k=20,
-                memory_types=["initial_story", "event", "lore", "action"]
+                memory_types=["initial_story", "event", "lore", "action"],
             )
-            
+
             if not all_memories:
                 return "No story events found."
-            
+
             # Build context for summarization
             context = self._build_memory_context(all_memories)
-            
+
             summary_prompt = f"""
             Based on the following story memories, create a concise summary of the adventure so far:
             
@@ -322,16 +318,18 @@ What do you do?
             
             Summary:
             """
-            
-            response = await self.llm.agenerate([[HumanMessage(content=summary_prompt)]])
+
+            response = await self.llm.agenerate(
+                [[HumanMessage(content=summary_prompt)]]
+            )
             return response.generations[0][0].text
-            
+
         except Exception as e:
             logger.error(f"Error generating story summary: {e}")
             return "Error generating summary."
-    
+
+    #Function to Cleanup memories when user deletes chats
     async def cleanup_chat_memories(self, chat_id: str) -> bool:
-        """Clean up memories when a chat is deleted"""
         try:
             return await self.memory_manager.delete_chat_memories(chat_id)
         except Exception as e:

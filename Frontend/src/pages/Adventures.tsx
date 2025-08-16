@@ -119,7 +119,7 @@ const Adventures = () => {
     });
   };
 
-  // FIXED: Helper function to update adventure image URLs with force refresh option
+  // Helper function to update adventure image URLs with force refresh option
   const updateAdventureImages = async (
     adventure: Adventure,
     forceRefresh: boolean = false
@@ -127,7 +127,6 @@ const Adventures = () => {
     if (!imageGenerationEnabled) return adventure;
 
     try {
-      // Use the enhanced retry method with force refresh capability
       return await AdventureService.loadAdventureImagesWithRetry(
         adventure,
         8,
@@ -204,31 +203,23 @@ const Adventures = () => {
   const checkImageSystemHealth = async () => {
     try {
       const isEnabled = await AdventureService.isImageGenerationEnabled();
-      console.log("🖼️ Health check result:", isEnabled);
+      console.log("Health check result:", isEnabled);
 
-      // FIXED: Always enable for now since we know the APIs work
-      // The health check fails due to S3 permissions but presigned URLs work fine
       setImageGenerationEnabled(true);
-      console.log(
-        "🖼️ Image generation enabled: true (bypassing faulty health check)"
-      );
     } catch (error) {
       console.error("Failed to check image system health:", error);
-      // Enable anyway since we know the image APIs work
       setImageGenerationEnabled(true);
-      console.log(
-        "🖼️ Image generation enabled: true (enabled despite health check error)"
-      );
+      ;
     }
   };
 
-  // FIXED: Load user's adventures from database with improved image loading
+  // Load user's adventures from database with improved image loading
   const loadAdventures = async () => {
     if (!isAuthenticated) return;
 
     setIsLoadingAdventures(true);
     try {
-      console.log("🏰 Loading user adventures from database...");
+      console.log("Loading user adventures from database...");
       const response = await AdventureService.getUserSessions();
 
       // Create base adventures
@@ -252,12 +243,12 @@ const Adventures = () => {
       }));
 
       console.log(
-        `🏰 Loaded ${baseAdventures.length} adventures from database`
+        `Loaded ${baseAdventures.length} adventures from database`
       );
 
       // Load images for each adventure if image generation is enabled
       if (imageGenerationEnabled) {
-        console.log("🖼️ Loading images for adventures...");
+        console.log("Loading images for adventures...");
 
         // Process adventures in smaller batches to avoid overwhelming the API
         const batchSize = 3;
@@ -318,7 +309,7 @@ const Adventures = () => {
         }
 
         console.log(
-          `🖼️ Loaded images for ${adventuresWithImages.length} adventures`
+          `Loaded images for ${adventuresWithImages.length} adventures`
         );
       } else {
         // No image generation, just set base adventures
@@ -386,21 +377,19 @@ const Adventures = () => {
             ? {
                 ...adv,
                 isImagesLoading: true,
-                imageLoadError: false, // Clear any previous errors
+                imageLoadError: false, 
               }
             : adv
         )
       );
 
-      // CRITICAL: Add warmup and initial delay for cold start protection
+      // Added warmup and initial delay for cold start protection
       try {
-        console.log("🔥 Warming up image service...");
         await AdventureService.checkImageHealth();
         await new Promise((r) => setTimeout(r, 1500)); // Longer initial delay for new chats
-        console.log("🔥 Image service warmed up");
+        console.log("Image service warmed up");
       } catch (warmupError) {
-        console.warn("🔥 Image service warmup failed:", warmupError);
-        // Continue anyway - warmup is best effort
+        console.warn("Image service warmup failed:", warmupError);
       }
 
       // Wait for images with enhanced timeout and polling
@@ -454,11 +443,11 @@ const Adventures = () => {
             setSelectedAdventure(updatedAdventure);
           }
 
-          console.log("🎉 Images loaded successfully for new adventure!");
+          console.log("Images loaded successfully for new adventure!");
         } catch (error) {
           console.error("Failed to load images after generation:", error);
 
-          // Mark as error but don't break the UI
+          
           setAdventures((prev) =>
             prev.map((adv) =>
               adv.sessionId === sessionId
@@ -475,7 +464,7 @@ const Adventures = () => {
     } catch (error) {
       console.error("Error waiting for images:", error);
 
-      // More graceful error handling - show retry option instead of just failing
+
       setAdventures((prev) =>
         prev.map((adv) =>
           adv.sessionId === sessionId
@@ -488,19 +477,19 @@ const Adventures = () => {
         )
       );
 
-      // Show user-friendly message
+
       console.log(
-        "🔄 Image generation encountered issues. Images may load after a moment..."
+        "Image generation encountered issues. Images may load after a moment..."
       );
     }
   };
 
-  // NEW: Force refresh images for selected adventure
+  //Force refresh images for selected adventure
   const refreshSelectedAdventureImages = async () => {
     if (!selectedAdventure || !imageGenerationEnabled) return;
 
     try {
-      console.log("🔄 Force refreshing selected adventure images");
+      console.log("Force refreshing selected adventure images");
 
       // Clear cache first
       AdventureService.clearImageCache(selectedAdventure.sessionId);
@@ -508,7 +497,6 @@ const Adventures = () => {
       const refreshedAdventure =
         await AdventureService.forceRefreshAdventureImages(selectedAdventure);
 
-      // Update both selected adventure and adventures list
       setSelectedAdventure(refreshedAdventure);
       setAdventures((prev) =>
         prev.map((adv) =>
@@ -518,21 +506,18 @@ const Adventures = () => {
         )
       );
 
-      console.log("🔄 Selected adventure images refreshed");
+      console.log("Selected adventure images refreshed");
     } catch (error) {
-      console.error("🔄 Failed to refresh selected adventure images:", error);
+      console.error("Failed to refresh selected adventure images:", error);
     }
   };
 
-  // NEW: Force refresh images for any adventure
   const forceRefreshAdventureImages = async (sessionId: string) => {
-    console.log(`🔄 Force refreshing images for session: ${sessionId}`);
+    console.log(`Force refreshing images for session: ${sessionId}`);
 
     try {
-      // Clear cache first
       AdventureService.clearImageCache(sessionId);
 
-      // Find and update the adventure
       const adventureToUpdate = adventures.find(
         (adv) => adv.sessionId === sessionId
       );
@@ -540,22 +525,20 @@ const Adventures = () => {
         const refreshedAdventure =
           await AdventureService.forceRefreshAdventureImages(adventureToUpdate);
 
-        // Update adventures list
         setAdventures((prev) =>
           prev.map((adv) =>
             adv.sessionId === sessionId ? refreshedAdventure : adv
           )
         );
 
-        // Update selected adventure if it matches
         if (selectedAdventure?.sessionId === sessionId) {
           setSelectedAdventure(refreshedAdventure);
         }
 
-        console.log("🔄 Force refresh completed");
+        console.log("Force refresh completed");
       }
     } catch (error) {
-      console.error("🔄 Force refresh failed:", error);
+      console.error("Force refresh failed:", error);
     }
   };
 
@@ -588,7 +571,7 @@ const Adventures = () => {
     }
   }, [isAuthenticated, imageGenerationEnabled]);
 
-  // FIXED: Improved image synchronization with better state management
+  //Image synchronization with better state management
   useEffect(() => {
     if (!imageGenerationEnabled || !isAuthenticated || adventures.length === 0)
       return;
@@ -602,7 +585,7 @@ const Adventures = () => {
 
       try {
         console.log(
-          `🖼️ Adventures: Updating images for ${adventuresNeedingUpdates.length} pending adventures`
+          `Adventures: Updating images for ${adventuresNeedingUpdates.length} pending adventures`
         );
 
         const updatedAdventures = await Promise.allSettled(
@@ -655,10 +638,10 @@ const Adventures = () => {
         });
 
         if (hasChanges) {
-          console.log("🖼️ Adventures: Updating adventures with new image data");
+          console.log("Adventures: Updating adventures with new image data");
           setAdventures(processedAdventures);
 
-          // CRITICAL FIX: Synchronize selected adventure immediately
+          // Synchronize selected adventure immediately
           if (selectedAdventure) {
             const updatedSelected = processedAdventures.find(
               (adv) => adv.sessionId === selectedAdventure.sessionId
@@ -675,7 +658,7 @@ const Adventures = () => {
                   selectedAdventure.imageLoadError)
             ) {
               console.log(
-                "🖼️ Adventures: Syncing selected adventure with new images"
+                "Adventures: Syncing selected adventure with new images"
               );
               setSelectedAdventure(updatedSelected);
             }
@@ -686,7 +669,7 @@ const Adventures = () => {
       }
     };
 
-    // CRITICAL FIX: Immediate update when adventures change, then periodic updates
+    // Immediate update when adventures change, then periodic updates
     updateImagesForPendingAdventures();
 
     // Update images every 10 seconds for pending adventures (more frequent)
@@ -903,7 +886,6 @@ const Adventures = () => {
       e.stopPropagation(); // Prevent adventure selection when clicking from sidebar
     }
 
-    // Show confirmation modal
     setAdventureToDelete(adventure);
     setShowDeleteModal(true);
   };

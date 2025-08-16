@@ -96,7 +96,7 @@ const DeleteConfirmationModal = ({
           {/* Warning Footer */}
           <div className="mt-6 text-center">
             <p className="text-xs text-muted-foreground/70">
-              💡 Tip: You can always create new adventures to continue your journey
+              Tip: You can always create new adventures to continue your journey
             </p>
           </div>
         </div>
