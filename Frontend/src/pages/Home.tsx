@@ -53,7 +53,7 @@ const Home = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Replace the features array in Home.tsx with this updated version:
+
 
   const features = [
     {
@@ -76,7 +76,6 @@ const Home = () => {
     },
   ];
 
-  // Also update the features section title and description:
 
   // Helper function to extract genre tags from story content
   const extractGenreTags = (title: string, content: string): string[] => {
@@ -145,51 +144,47 @@ const Home = () => {
     }
   };
 
-  // GUARANTEED: Check image generation system availability - ALWAYS ENABLED
+
   const checkImageSystemHealth = async () => {
     try {
-      console.log("🖼️ Home: Checking image system health...");
+      console.log("Home: Checking image system health...");
 
-      // GUARANTEED FIX: Always enable image generation
-      // We know the image APIs work (confirmed by your debug tests)
-      // The health check fails due to S3 bucket permissions, but presigned URLs work perfectly
       setImageGenerationEnabled(true);
       console.log(
-        "🖼️ Home: Image generation GUARANTEED enabled (health check bypassed)"
+        "Home: Image generation enabled (health check bypassed)"
       );
     } catch (error) {
-      console.error("🖼️ Home: Image system health check error:", error);
-      // GUARANTEED: Enable anyway since we know the image APIs work
+      console.error("ome: Image system health check error:", error);
       setImageGenerationEnabled(true);
       console.log(
-        "🖼️ Home: Image generation GUARANTEED enabled (despite health check error)"
+        "Home: Image generation enabled (despite health check error)"
       );
     }
   };
 
-  // GUARANTEED: Load image URLs for an adventure with retry and persistence
+  // Load image URLs for an adventure with retry and persistence
   const loadAdventureImages = async (
     adventure: Adventure
   ): Promise<Adventure> => {
     if (!imageGenerationEnabled) {
       console.log(
-        `🖼️ Home: Image generation disabled, skipping ${adventure.sessionId}`
+        `Home: Image generation disabled, skipping ${adventure.sessionId}`
       );
       return adventure;
     }
 
     try {
       console.log(
-        `🖼️ Home: Loading images for adventure ${adventure.sessionId}`
+        `Home: Loading images for adventure ${adventure.sessionId}`
       );
 
-      // Use the same proven retry method as Adventures.tsx
+      
       const result = await AdventureService.loadAdventureImagesWithRetry(
         adventure,
         3
       ); // Extra retry for reliability
 
-      console.log(`🖼️ Home: Images loaded for ${adventure.sessionId}:`, {
+      console.log(`Home: Images loaded for ${adventure.sessionId}:`, {
         world: !!result.worldImageUrl,
         character: !!result.characterImageUrl,
         loading: result.isImagesLoading,
@@ -199,7 +194,7 @@ const Home = () => {
       return result;
     } catch (error) {
       console.error(
-        `🖼️ Home: Failed to load images for ${adventure.sessionId}:`,
+        `Home: Failed to load images for ${adventure.sessionId}:`,
         error
       );
       return {
@@ -210,16 +205,16 @@ const Home = () => {
     }
   };
 
-  // GUARANTEED: Load user's adventures with persistent images
+  // Load user's adventures with persistent images
   const loadAdventures = async () => {
     if (!isAuthenticated) {
-      console.log("🏰 Home: Not authenticated, skipping adventure loading");
+      console.log("Home: Not authenticated, skipping adventure loading");
       return;
     }
 
     setIsLoadingAdventures(true);
     try {
-      console.log("🏰 Home: Loading user adventures for home page...");
+      console.log("Home: Loading user adventures for home page...");
       const response = await AdventureService.getUserSessions();
 
       // Get the 6 most recent adventures
@@ -246,22 +241,22 @@ const Home = () => {
       }));
 
       console.log(
-        `🏰 Home: Loaded ${baseAdventures.length} base adventures from database`
+        `Home: Loaded ${baseAdventures.length} base adventures from database`
       );
 
-      // GUARANTEED: Load images if system is enabled
+      // Load images if system is enabled
       if (imageGenerationEnabled) {
-        console.log("🖼️ Home: Loading images for all adventures...");
+        console.log("Home: Loading images for all adventures...");
 
         try {
           // Process adventures in smaller batches for reliability
-          const batchSize = 2; // Smaller batches for home page
+          const batchSize = 2; 
           const adventuresWithImages: Adventure[] = [];
 
           for (let i = 0; i < baseAdventures.length; i += batchSize) {
             const batch = baseAdventures.slice(i, i + batchSize);
             console.log(
-              `🖼️ Home: Processing batch ${
+              `Home: Processing batch ${
                 Math.floor(i / batchSize) + 1
               }/${Math.ceil(baseAdventures.length / batchSize)}`
             );
@@ -326,12 +321,12 @@ const Home = () => {
           }
 
           console.log(
-            `🖼️ Home: GUARANTEED - Loaded images for ${adventuresWithImages.length} adventures`
+            `Home: Loaded images for ${adventuresWithImages.length} adventures`
           );
           setAdventures(adventuresWithImages);
         } catch (error) {
-          console.error("🖼️ Home: Failed to process adventure images:", error);
-          // GUARANTEED: Fallback to adventures without images rather than failing completely
+          console.error("Home: Failed to process adventure images:", error);
+          // Fallback to adventures without images rather than failing completely
           setAdventures(
             baseAdventures.map((adv) => ({
               ...adv,
@@ -343,12 +338,12 @@ const Home = () => {
       } else {
         // No image generation, just set base adventures
         console.log(
-          "🖼️ Home: Image generation disabled, setting adventures without images"
+          "Home: Image generation disabled, setting adventures without images"
         );
         setAdventures(baseAdventures);
       }
     } catch (error) {
-      console.error("🏰 Home: Failed to load adventures:", error);
+      console.error("Home: Failed to load adventures:", error);
       // Don't show error to user, just log it
     } finally {
       setIsLoadingAdventures(false);
@@ -361,7 +356,7 @@ const Home = () => {
     navigate(`/adventures?select=${adventure.sessionId}`);
   };
 
-  // GUARANTEED: Periodically update image status for pending adventures
+  // Periodically update image status for pending adventures
   useEffect(() => {
     if (!imageGenerationEnabled || !isAuthenticated || adventures.length === 0)
       return;
@@ -375,7 +370,7 @@ const Home = () => {
 
       try {
         console.log(
-          `🖼️ Home: Updating ${pendingAdventures.length} pending adventures`
+          `Home: Updating ${pendingAdventures.length} pending adventures`
         );
 
         const updatedAdventures = await Promise.allSettled(
@@ -425,31 +420,31 @@ const Home = () => {
         });
 
         if (hasChanges) {
-          console.log("🖼️ Home: Updated pending images with changes");
+          console.log("Home: Updated pending images with changes");
           setAdventures(processedAdventures);
         }
       } catch (error) {
-        console.error("🖼️ Home: Error updating pending images:", error);
+        console.error("Home: Error updating pending images:", error);
       }
     };
 
-    // GUARANTEED: Update pending images every 10 seconds (more frequent for better UX)
+    // Update pending images every 10 seconds (more frequent for better UX)
     const interval = setInterval(updatePendingImages, 10000);
     return () => clearInterval(interval);
   }, [adventures, imageGenerationEnabled, isAuthenticated]);
 
-  // GUARANTEED: Proper initialization order
+  //Proper initialization order
   useEffect(() => {
     if (isAuthenticated) {
-      console.log("🏰 Home: User authenticated, initializing image system");
+      console.log("Home: User authenticated, initializing image system");
       checkImageSystemHealth();
     }
   }, [isAuthenticated]);
 
-  // GUARANTEED: Load adventures after image system is confirmed ready
+  // Load adventures after image system is confirmed ready
   useEffect(() => {
     if (isAuthenticated && imageGenerationEnabled !== undefined) {
-      console.log("🏰 Home: Image system ready, loading adventures");
+      console.log("Home: Image system ready, loading adventures");
       loadAdventures();
     }
   }, [isAuthenticated, imageGenerationEnabled]);
@@ -504,7 +499,7 @@ const Home = () => {
           <div className="flex justify-center">
             {/* Centered Content */}
             <div className="max-w-6xl text-center space-y-10 animate-fade-in">
-              {/* Main Headline - INCREASED TEXT SIZES */}
+              {/* Main Headline*/}
               <div className="space-y-8">
                 <h1 className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold leading-tight animate-fade-in">
                   <span className="block animate-slide-up">
@@ -550,7 +545,7 @@ const Home = () => {
                 )}
               </div>
 
-              {/* Additional Info - LARGER TEXT */}
+              {/* Additional Info */}
               <p className="text-lg md:text-xl text-muted-foreground animate-fade-in animate-delay-1000">
                 100% Free to start • Create unlimited stories
               </p>
@@ -607,13 +602,13 @@ const Home = () => {
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           onError={(e) => {
                             console.error(
-                              `🖼️ Home: World image failed to load for ${adventure.sessionId}`
+                              `Home: World image failed to load for ${adventure.sessionId}`
                             );
                             // Don't hide the image, let it show broken image icon
                           }}
                           onLoad={() => {
                             console.log(
-                              `🖼️ Home: World image loaded successfully for ${adventure.sessionId}`
+                              `Home: World image loaded successfully for ${adventure.sessionId}`
                             );
                           }}
                         />
@@ -664,12 +659,12 @@ const Home = () => {
                               alt="Character"
                               onError={(e) => {
                                 console.error(
-                                  `🖼️ Home: Character image failed to load for ${adventure.sessionId}`
+                                  `Home: Character image failed to load for ${adventure.sessionId}`
                                 );
                               }}
                               onLoad={() => {
                                 console.log(
-                                  `🖼️ Home: Character image loaded successfully for ${adventure.sessionId}`
+                                  `Home: Character image loaded successfully for ${adventure.sessionId}`
                                 );
                               }}
                             />
@@ -793,10 +788,10 @@ const Home = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">
-              Why Adventurers Choose QuestWeaver
+              Why Choose QuestWeaver
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Experience the next generation of interactive storytelling with
+              Experience interactive storytelling with
               AI-generated visuals
             </p>
           </div>
@@ -837,7 +832,7 @@ const Home = () => {
               Ready to Begin Your Epic Journey?
             </h2>
             <p className="text-xl text-muted-foreground">
-              Join thousands of adventurers crafting their stories with
+              Join to craft your stories the way you want, with
               AI-powered narratives and stunning visuals
             </p>
             <Button

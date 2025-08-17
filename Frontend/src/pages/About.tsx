@@ -111,14 +111,10 @@ const About = () => {
       </section>
 
       {/* Mission Section */}
-      <section className="py-20">
+      <section className="py-8">
         <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold mb-4">Our Mission</h2>
-              <p className="text-xl text-muted-foreground">
-                To democratize storytelling and make every person the hero of their own epic, visually immersive tale
-              </p>
             </div>
 
             <div className="grid md:grid-cols-2 gap-12 items-center">
@@ -161,7 +157,7 @@ const About = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">Platform Features</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Experience cutting-edge AI technology designed to enhance your creative storytelling journey
+              Experience cutting-edge AI technology, powered by GPT-4 designed to enhance your creative storytelling journey
             </p>
           </div>
 
@@ -203,7 +199,7 @@ const About = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold mb-4">Technical Innovation</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Built with state-of-the-art AI technologies to deliver unparalleled storytelling experiences
+              Built with AI technologies to deliver unparalleled storytelling experiences
             </p>
           </div>
 
