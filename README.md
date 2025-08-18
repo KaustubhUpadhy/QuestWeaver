@@ -1,13 +1,13 @@
 # QuestWeaver - AI-Powered Interactive Storytelling Platform
 
 ![QuestWeaver Hero](Frontend/1755456882573.jpeg)
-![Sample Adventure](Frontend/Screenshot 2025-08-17 171640.png)
 
 ## Overview
 
 QuestWeaver is a full-stack AI platform that generates dynamic, personalized interactive narratives. Built with cutting-edge AI technologies, it creates text-based adventure stories that adapt to user choices while maintaining narrative coherence and visual immersion through automated image generation.
 
 **Check out the Project Here:** [QuestWeaver](https://quest-weaver.vercel.app/)
+![Sample Adventure](Frontend/example.png)
 
 ## Key Features
 
@@ -41,14 +41,3 @@ QuestWeaver is a full-stack AI platform that generates dynamic, personalized int
 - **Supabase** for PostgreSQL database and OAuth authentication
 - **Multi-variant image processing** with automated retry mechanisms
 
-## System Workflow
-```mermaid
-flowchart TD
-    A[User Input] --> B[GPT-4 Processing]
-    B --> C[Story Generation]
-    C --> D[Memory Storage (ChromaDB)]
-    D --> E[Context Retrieval (RAG)]
-    E --> F[Enhanced Story Continuation]
-    C --> G[Image Generation (Stable Diffusion XL)]
-    G --> H[AWS S3 Storage]
-    H --> I[Frontend Delivery]
