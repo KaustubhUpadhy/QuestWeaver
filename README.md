@@ -1,6 +1,7 @@
 # QuestWeaver - AI-Powered Interactive Storytelling Platform
 
 ![QuestWeaver Hero](Frontend/1755456882573.jpeg)
+![Sample Adventure](Frontend/Screenshot 2025-08-17 171640.png)
 
 ## Overview
 
@@ -41,9 +42,13 @@ QuestWeaver is a full-stack AI platform that generates dynamic, personalized int
 - **Multi-variant image processing** with automated retry mechanisms
 
 ## System Workflow
-User Input → GPT-4 Processing → Story Generation → Memory Storage (ChromaDB)
-↓
-Image Generation (Stable Diffusion XL) → AWS S3 Storage → Frontend Delivery
-↓
-Context Retrieval (RAG) → Enhanced Story Continuation
-
+```mermaid
+flowchart TD
+    A[User Input] --> B[GPT-4 Processing]
+    B --> C[Story Generation]
+    C --> D[Memory Storage (ChromaDB)]
+    D --> E[Context Retrieval (RAG)]
+    E --> F[Enhanced Story Continuation]
+    C --> G[Image Generation (Stable Diffusion XL)]
+    G --> H[AWS S3 Storage]
+    H --> I[Frontend Delivery]
