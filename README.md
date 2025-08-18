@@ -4,7 +4,7 @@
 
 ## Overview
 
-QuestWeaver is a full-stack AI platform that generates dynamic, personalized interactive narratives. Built with cutting-edge AI technologies, it creates stories that adapt to user choices while maintaining narrative coherence and visual immersion through automated image generation.
+QuestWeaver is a full-stack AI platform that generates dynamic, personalized interactive narratives. Built with cutting-edge AI technologies, it creates text-based adventure stories that adapt to user choices while maintaining narrative coherence and visual immersion through automated image generation.
 
 **Check out the Project Here:** [QuestWeaver](https://quest-weaver.vercel.app/)
 
